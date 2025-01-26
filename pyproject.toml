@@ -1,0 +1,23 @@
+[project]
+name = "transcript-to-audio"
+version = "0.0.1"
+description = "A library for turning a transcript into a audio file."
+authors = [
+    {name = "Markus Haverinen",email = "mathatan@gmail.com"}
+]
+readme = "README.md"
+dependencies = [
+    "pydub (>=0.25.1,<0.26.0)",
+    "elevenlabs (>=1.50.5,<2.0.0)",
+    "edge-tts (>=7.0.0,<8.0.0)",
+    "ffmpeg (>=1.4,<2.0)",
+    "google-cloud-texttospeech (>=2.24.0,<3.0.0)",
+    "nest-asyncio (>=1.6.0,<2.0.0)"
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

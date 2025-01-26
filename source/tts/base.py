@@ -1,8 +1,38 @@
 """Abstract base class for Text-to-Speech providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, ClassVar, Tuple
+from typing import List, ClassVar, Tuple, Dict
 import re
+
+
+class SpeakerSegment:
+    """
+    Represents a segment of text associated with a specific speaker.
+
+    Attributes:
+        speaker_id (int): The ID of the speaker (e.g., 1 for <speaker1>).
+        parameters (dict): Additional parameters extracted from the tag (e.g., {"param": "value"}).
+        text (str): The text content of the segment.
+        voice_config (dict): The voice configuration for the speaker.
+    """
+
+    def __init__(
+        self,
+        speaker_id: int,
+        parameters: Dict[str, str],
+        text: str,
+        voice_config: Dict[str, str],
+    ):
+        self.speaker_id = speaker_id
+        self.parameters = parameters
+        self.text = text
+        self.voice_config = voice_config
+
+    def __repr__(self):
+        return (
+            f"SpeakerSegment(speaker_id={self.speaker_id}, "
+            f"parameters={self.parameters}, text={self.text}, voice_config={self.voice_config})"
+        )
 
 
 class TTSProvider(ABC):
@@ -12,23 +42,23 @@ class TTSProvider(ABC):
     COMMON_SSML_TAGS: ClassVar[List[str]] = ["lang", "p", "phoneme", "s", "sub"]
 
     @abstractmethod
-    def generate_audio(self, text: str, voice: str, model: str, voice2: str) -> bytes:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
-        Generate audio from text using the provider's API.
+        Generate audio for a list of SpeakerSegment objects using the provider's API.
 
         Args:
-            text: Text to convert to speech
-            voice: Voice ID/name to use
-            model: Model ID/name to use
+            segments: List of SpeakerSegment objects containing text and voice configurations.
 
         Returns:
-            Audio data as bytes
+            List of audio data as bytes for each segment.
 
         Raises:
-            ValueError: If invalid parameters are provided
-            RuntimeError: If audio generation fails
+            ValueError: If invalid parameters are provided.
+            RuntimeError: If audio generation fails.
         """
-        pass
+        raise NotImplementedError(
+            "Subclasses must implement the generate_audio method."
+        )
 
     def get_supported_tags(self) -> List[str]:
         """
@@ -56,40 +86,61 @@ class TTSProvider(ABC):
             raise ValueError("Model must be specified")
 
     def split_qa(
-        self, input_text: str, ending_message: str, supported_tags: List[str] = None
-    ) -> List[Tuple[str, str]]:
+        self, input_text: str, supported_tags: List[str] = None
+    ) -> List[Tuple[SpeakerSegment, SpeakerSegment]]:
         """
-        Split the input text into question-answer pairs.
+        Parse input text into tuples of SpeakerSegment instances.
 
         Args:
-            input_text (str): The input text containing Person1 and Person2 dialogues.
-            ending_message (str): The ending message to add to the end of the input text.
+            input_text (str): The input text containing <speakerN> tags.
+            supported_tags (List[str]): Supported SSML tags.
 
         Returns:
-                List[Tuple[str, str]]: A list of tuples containing (Person1, Person2) dialogues.
+            List[Tuple[SpeakerSegment, SpeakerSegment]]: A list of tuples containing SpeakerSegment instances.
         """
+        # Retrieve predefined configurations from tts_config
+        predefined_configs = self.tts_config.get("speaker_configs", {})
+
+        # Clean the input text
         input_text = self.clean_tss_markup(input_text, supported_tags=supported_tags)
 
-        # Add placeholder if input_text starts with <Person2>
-        if input_text.strip().startswith("<Person2>"):
-            input_text = "<Person1> Humm... </Person1>" + input_text
-
-        # Add ending message to the end of input_text
-        if input_text.strip().endswith("</Person1>"):
-            input_text += f"<Person2>{ending_message}</Person2>"
-
-        # Regular expression pattern to match Person1 and Person2 dialogues
-        pattern = r"<Person1>(.*?)</Person1>\s*<Person2>(.*?)</Person2>"
-
-        # Find all matches in the input text
+        # Regular expression pattern to match <speakerN> tags
+        pattern = r"<speaker(\d+)(.*?)>(.*?)</speaker\1>"
         matches = re.findall(pattern, input_text, re.DOTALL | re.IGNORECASE)
 
-        # Process the matches to remove extra whitespace and newlines
-        processed_matches = [
-            (" ".join(person1.split()).strip(), " ".join(person2.split()).strip())
-            for person1, person2 in matches
+        segments = []
+        for speaker_id, params, text in matches:
+            speaker_id = int(speaker_id)
+
+            # Parse parameters into a dictionary
+            param_dict = dict(re.findall(r'(\w+)="(.*?)"', params))
+
+            # Retrieve default configuration for the speaker ID
+            default_config = predefined_configs.get(speaker_id, {}).copy()
+
+            # Overwrite default configuration with parameters from the tag
+            voice_config = {**default_config, **param_dict}
+
+            segments.append(
+                SpeakerSegment(speaker_id, param_dict, text.strip(), voice_config)
+            )
+
+        # Combine consecutive segments with the same speaker_id
+        combined_segments = []
+        for segment in segments:
+            if (
+                combined_segments
+                and combined_segments[-1].speaker_id == segment.speaker_id
+            ):
+                combined_segments[-1].text += " " + segment.text
+            else:
+                combined_segments.append(segment)
+
+        # Return tuples of question-answer pairs (default: speaker 1 = question, speaker 2 = answer)
+        return [
+            (combined_segments[i], combined_segments[i + 1])
+            for i in range(0, len(combined_segments), 2)
         ]
-        return processed_matches
 
     def clean_tss_markup(
         self,

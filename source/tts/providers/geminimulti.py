@@ -1,8 +1,8 @@
 """Google Cloud Text-to-Speech provider implementation."""
 
-from google.cloud import texttospeech_v1beta1
-from typing import List
-from ..base import TTSProvider
+from google.cloud import texttospeech
+from typing import List, Dict, Any
+from ..base import SpeakerSegment, TTSProvider
 import re
 import logging
 from io import BytesIO
@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 class GeminiMultiTTS(TTSProvider):
     """Google Cloud Text-to-Speech provider with multi-speaker support."""
 
-    def __init__(self, api_key: str = None, model: str = "en-US-Studio-MultiSpeaker"):
+    def __init__(self, config: Dict[str, Any]):
         """
-        Initialize Google Cloud TTS provider.
+        Initialize Google Cloud TTS provider with multi-speaker support.
 
         Args:
-            api_key (str): Google Cloud API key
+            config (Dict[str, Any]): Configuration dictionary from tts_config.
         """
-        self.model = model
+        self.model = config.get("model", "en-US-Studio-MultiSpeaker")
         try:
-            self.client = texttospeech_v1beta1.TextToSpeechClient(
-                client_options={"api_key": api_key} if api_key else None
+            self.client = texttospeech.TextToSpeechClient(
+                client_options={"api_key": config.get("api_key")}
             )
             logger.info("Successfully initialized GeminiMultiTTS client")
         except Exception as e:
@@ -98,8 +98,6 @@ class GeminiMultiTTS(TTSProvider):
         Returns:
             List[str]: List of text chunks
         """
-        # print(f"### TEXT: {text}" )
-        # print(f"### LENGTH: {len(text)}")
         if len(text) <= max_chars:
             return [text]
 
@@ -221,109 +219,49 @@ class GeminiMultiTTS(TTSProvider):
                 f"Failed to merge audio chunks and no valid fallback found: {str(e)}"
             )
 
-    def generate_audio(
-        self,
-        text: str,
-        voice: str = "R",
-        model: str = "en-US-Studio-MultiSpeaker",
-        voice2: str = "S",
-    ):
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
         Generate audio using Google Cloud TTS API with multi-speaker support.
-        Handles text longer than 5000 bytes by chunking and merging.
+        Handles all SpeakerSegment instances in a single call.
         """
-        logger.info(f"Starting audio generation for text of length: {len(text)}")
-        logger.debug(f"Parameters: voice={voice}, voice2={voice2}, model={model}")
-        # print("######################### TEXT #########################")
-        # print(text)
-        # print("######################### END TEXT #########################")
+        logger.info(f"Starting audio generation for {len(segments)} segments")
+        audio_chunks = []
+
         try:
-            # Split text into chunks if needed
-            text_chunks = self.chunk_text(text)
-            logger.info(
-                f"#########################33 Text split into {len(text_chunks)} chunks"
-            )
-            audio_chunks = []
-            # print(text_chunks[0])
-
-            # Process each chunk
-            for i, chunk in enumerate(text_chunks, 1):
-                logger.debug(f"Processing chunk {i}/{len(text_chunks)}")
-                # Create multi-speaker markup
-                multi_speaker_markup = texttospeech_v1beta1.MultiSpeakerMarkup()
-                # print("######################### CHUNK #########################")
-                # print(chunk)
-                # Get Q&A pairs for this chunk
-                qa_pairs = self.split_qa(chunk, "", self.get_supported_tags())
-                logger.debug(f"Found {len(qa_pairs)} Q&A pairs in chunk {i}")
-                # print("######################### QA PAIRS #########################")
-                # print(qa_pairs)
-                # Add turns for each Q&A pair
-                for j, (question, answer) in enumerate(qa_pairs, 1):
-                    logger.debug(f"Processing Q&A pair {j}/{len(qa_pairs)}")
-
-                    # Split question into smaller chunks if needed
-                    question_chunks = self.split_turn_text(question.strip())
-                    logger.debug(f"Question split into {len(question_chunks)} chunks")
-                    logger.debug(
-                        f"######################### Question chunks: {question_chunks}"
+            # Create multi-speaker markup
+            multi_speaker_markup = texttospeech.MultiSpeakerMarkup(
+                turns=[
+                    texttospeech.MultiSpeakerMarkup.Turn(
+                        text=segment.text.strip(),
+                        speaker=segment.voice_config["voice"],
                     )
-                    for q_chunk in question_chunks:
-                        logger.debug(
-                            f"Adding question turn: '{q_chunk[:50]}...' (length: {len(q_chunk)})"
-                        )
-                        q_turn = texttospeech_v1beta1.MultiSpeakerMarkup.Turn()
-                        q_turn.text = q_chunk
-                        q_turn.speaker = voice
-                        multi_speaker_markup.turns.append(q_turn)
+                    for segment in segments
+                ]
+            )
 
-                    # Split answer into smaller chunks if needed
-                    if answer:
-                        answer_chunks = self.split_turn_text(answer.strip())
-                        logger.debug(f"Answer split into {len(answer_chunks)} chunks")
-                        logger.debug(
-                            f"######################### Answer chunks: {answer_chunks}"
-                        )
-                        for a_chunk in answer_chunks:
-                            logger.debug(
-                                f"Adding answer turn: '{a_chunk[:50]}...' (length: {len(a_chunk)})"
-                            )
-                            a_turn = texttospeech_v1beta1.MultiSpeakerMarkup.Turn()
-                            a_turn.text = a_chunk
-                            a_turn.speaker = voice2
-                            multi_speaker_markup.turns.append(a_turn)
+            # Create synthesis input with multi-speaker markup
+            synthesis_input = texttospeech.SynthesisInput(
+                multi_speaker_markup=multi_speaker_markup
+            )
 
-                logger.debug(
-                    f"Created markup with {len(multi_speaker_markup.turns)} turns"
-                )
+            # Set voice parameters
+            voice_params = texttospeech.VoiceSelectionParams(
+                language_code="en-US", name=self.model
+            )
 
-                # Create synthesis input with multi-speaker markup
-                synthesis_input = texttospeech_v1beta1.SynthesisInput(
-                    multi_speaker_markup=multi_speaker_markup
-                )
+            # Set audio config
+            audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.MP3
+            )
 
-                logger.debug("Calling synthesize_speech API")
-                # Set voice parameters
-                voice_params = texttospeech_v1beta1.VoiceSelectionParams(
-                    language_code="en-US", name=model
-                )
+            # Generate speech
+            logger.debug("Calling synthesize_speech API")
+            response = self.client.synthesize_speech(
+                input=synthesis_input, voice=voice_params, audio_config=audio_config
+            )
 
-                # Set audio config
-                audio_config = texttospeech_v1beta1.AudioConfig(
-                    audio_encoding=texttospeech_v1beta1.AudioEncoding.MP3,
-                    # sample_rate_hertz=44100,  # Specify sample rate
-                    # effects_profile_id=['headphone-class-device'],  # Optimize for headphones
-                    # speaking_rate=1.0,  # Normal speaking rate
-                )
+            audio_chunks.append(response.audio_content)
 
-                # Generate speech for this chunk
-                response = self.client.synthesize_speech(
-                    input=synthesis_input, voice=voice_params, audio_config=audio_config
-                )
-
-                audio_chunks.append(response.audio_content)
-            # print(f"#### Audio chunks: {audio_chunks}")
-            # print(f"#### Audio chunks length: {len(audio_chunks)}")
             return audio_chunks
 
         except Exception as e:

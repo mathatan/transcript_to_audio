@@ -3,37 +3,34 @@
 import edge_tts
 import os
 import tempfile
-from typing import List
-from ..base import TTSProvider
+from typing import List, Dict, Any
+from ..base import SpeakerSegment, TTSProvider
 
 
 class EdgeTTS(TTSProvider):
-    def __init__(self, api_key: str = None, model: str = None):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize Edge TTS provider.
 
         Args:
-            api_key (str): Not used for Edge TTS
-            model (str): Model name to use
+            config (Dict[str, Any]): Configuration dictionary from tts_config.
         """
-        self.model = (
-            model or "default"
-        )  # Edge TTS doesn't use models, but we set it for consistency
+        self.model = config.get("model", "default")
 
-    def generate_audio(
-        self, text: str, voice: str, model: str, voice2: str = None
-    ) -> bytes:
-        """Generate audio using Edge TTS."""
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+        """
+        Generate audio using Edge TTS for all SpeakerSegments in a single call.
+        """
         import nest_asyncio
         import asyncio
 
         # Apply nest_asyncio to allow nested event loops
         nest_asyncio.apply()
 
-        async def _generate():
-
-            communicate = edge_tts.Communicate(text, voice)
-            # Create a temporary file with proper context management
+        async def _generate(segment: SpeakerSegment) -> bytes:
+            communicate = edge_tts.Communicate(
+                segment.text, segment.voice_config["voice"]
+            )
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
                 temp_path = tmp_file.name
 
@@ -48,9 +45,9 @@ class EdgeTTS(TTSProvider):
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 
-        # Use nest_asyncio to handle nested event loops
+        # Use asyncio to process all segments
         loop = asyncio.get_event_loop()
-        return loop.run_until_complete(_generate())
+        return [loop.run_until_complete(_generate(segment)) for segment in segments]
 
     def get_supported_tags(self) -> List[str]:
         """Get supported SSML tags."""

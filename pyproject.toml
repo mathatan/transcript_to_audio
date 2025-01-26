@@ -12,7 +12,8 @@ dependencies = [
     "edge-tts (>=7.0.0,<8.0.0)",
     "ffmpeg (>=1.4,<2.0)",
     "google-cloud-texttospeech (>=2.24.0,<3.0.0)",
-    "nest-asyncio (>=1.6.0,<2.0.0)"
+    "nest-asyncio (>=1.6.0,<2.0.0)",
+    "openai (>=1.60.1,<2.0.0)",
 ]
 
 [tool.poetry.dependencies]

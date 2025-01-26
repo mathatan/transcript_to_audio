@@ -1,58 +1,41 @@
-"""Factory for creating TTS providers."""
+"""Factory for creating TTS provider instances."""
 
-from typing import Dict, Type, Optional
-from .base import TTSProvider
-from .providers.elevenlabs import ElevenLabsTTS
-from .providers.openai import OpenAITTS
+from typing import Dict, Any
 from .providers.edge import EdgeTTS
+from .providers.elevenlabs import ElevenLabsTTS
 from .providers.gemini import GeminiTTS
 from .providers.geminimulti import GeminiMultiTTS
+from .providers.openai import OpenAITTS
+from .providers.azureopenai import AzureOpenAITTS
+from .base import TTSProvider
 
 
 class TTSProviderFactory:
-    """Factory class for creating TTS providers."""
+    """
+    Factory class for creating TTS provider instances.
+    """
 
-    _providers: Dict[str, Type[TTSProvider]] = {
-        "elevenlabs": ElevenLabsTTS,
-        "openai": OpenAITTS,
+    _providers = {
         "edge": EdgeTTS,
+        "elevenlabs": ElevenLabsTTS,
         "gemini": GeminiTTS,
         "geminimulti": GeminiMultiTTS,
+        "openai": OpenAITTS,
+        "azureopenai": AzureOpenAITTS,
     }
 
-    @classmethod
-    def create(
-        cls,
-        provider_name: str,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-    ) -> TTSProvider:
+    @staticmethod
+    def create(provider_name: str, config: Dict[str, Any]) -> TTSProvider:
         """
         Create a TTS provider instance.
 
         Args:
-            provider_name: Name of the provider to create
-            api_key: Optional API key for the provider
-            model: Optional model name for the provider
+            provider_name (str): Name of the provider (e.g., 'edge', 'elevenlabs').
+            config (Dict[str, Any]): Configuration dictionary from tts_config.
 
         Returns:
-            TTSProvider instance
-
-        Raises:
-            ValueError: If provider_name is not supported
+            TTSProvider: An instance of the requested TTS provider.
         """
-        provider_class = cls._providers.get(provider_name.lower())
-        if not provider_class:
-            raise ValueError(
-                f"Unsupported provider: {provider_name}. "
-                f"Choose from: {', '.join(cls._providers.keys())}"
-            )
-
-        return (
-            provider_class(api_key, model) if api_key else provider_class(model=model)
-        )
-
-    @classmethod
-    def register_provider(cls, name: str, provider_class: Type[TTSProvider]) -> None:
-        """Register a new provider class."""
-        cls._providers[name.lower()] = provider_class
+        if provider_name not in TTSProviderFactory._providers:
+            raise ValueError(f"Unknown provider: {provider_name}")
+        return TTSProviderFactory._providers[provider_name](config)

@@ -1,8 +1,8 @@
 """Google Cloud Text-to-Speech provider implementation for single speaker."""
 
-from google.cloud import texttospeech_v1beta1
-from typing import List
-from ..base import TTSProvider
+from google.cloud import texttospeech
+from typing import List, Dict, Any
+from ..base import SpeakerSegment, TTSProvider
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,69 +11,74 @@ logger = logging.getLogger(__name__)
 class GeminiTTS(TTSProvider):
     """Google Cloud Text-to-Speech provider for single speaker."""
 
-    def __init__(self, api_key: str = None, model: str = "en-US-Journey-F"):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize Google Cloud TTS provider.
 
         Args:
-            api_key (str): Google Cloud API key
-            model (str): Default voice model to use
+            config (Dict[str, Any]): Configuration dictionary from tts_config.
         """
-        self.model = model
+        self.model = config.get("model", "en-US-Journey-F")
         try:
-            self.client = texttospeech_v1beta1.TextToSpeechClient(
-                client_options={"api_key": api_key} if api_key else None
+            self.client = texttospeech.TextToSpeechClient(
+                client_options={"api_key": config.get("api_key")}
             )
+            logger.info("Successfully initialized GeminiTTS client")
         except Exception as e:
             logger.error(f"Failed to initialize Google TTS client: {str(e)}")
             raise
 
-    def generate_audio(
-        self, text: str, voice: str = "en-US-Journey-F", model: str = None, **kwargs
-    ) -> bytes:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
-        Generate audio using Google Cloud TTS API.
-
-        Args:
-            text (str): Text to convert to speech
-            voice (str): Voice ID/name to use
-            model (str): Optional model override
-
-        Returns:
-            bytes: Audio data
-
-        Raises:
-            ValueError: If parameters are invalid
-            RuntimeError: If audio generation fails
+        Generate audio using Google Cloud TTS API for all SpeakerSegments in a single call.
         """
-        self.validate_parameters(text, voice, model or self.model)
-
-        try:
-            # Create synthesis input
-            synthesis_input = texttospeech_v1beta1.SynthesisInput(text=text)
-
-            # Set voice parameters
-            voice_params = texttospeech_v1beta1.VoiceSelectionParams(
-                language_code="en-US",
-                name=voice,
-                ssml_gender=texttospeech_v1beta1.SsmlVoiceGender.FEMALE,
+        audio_chunks = []
+        for segment in segments:
+            logger.info(
+                f"Generating audio for Speaker {segment.speaker_id}: {segment.text}"
             )
 
-            # Set audio config
-            audio_config = texttospeech_v1beta1.AudioConfig(
-                audio_encoding=texttospeech_v1beta1.AudioEncoding.MP3
-            )
+            try:
+                # Create synthesis input
+                synthesis_input = texttospeech.SynthesisInput(text=segment.text)
 
-            # Generate speech
-            response = self.client.synthesize_speech(
-                input=synthesis_input, voice=voice_params, audio_config=audio_config
-            )
+                # Set voice parameters
+                ssml_gender = segment.voice_config.get("ssml_gender", "NEUTRAL").upper()
+                ssml_gender_enum = getattr(
+                    texttospeech.SsmlVoiceGender,
+                    ssml_gender,
+                    texttospeech.SsmlVoiceGender.NEUTRAL,
+                )
 
-            return response.audio_content
+                voice_params = texttospeech.VoiceSelectionParams(
+                    language_code=segment.voice_config["language"],
+                    name=segment.voice_config["voice"],
+                    ssml_gender=ssml_gender_enum,
+                )
 
-        except Exception as e:
-            logger.error(f"Failed to generate audio: {str(e)}")
-            raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
+                # Set audio config
+                audio_config = texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3
+                )
+
+                # Generate speech
+                response = self.client.synthesize_speech(
+                    request={
+                        "input": synthesis_input,
+                        "voice": voice_params,
+                        "audio_config": audio_config,
+                    }
+                )
+
+                audio_chunks.append(response.audio_content)
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to generate audio for Speaker {segment.speaker_id}: {str(e)}"
+                )
+                raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
+
+        return audio_chunks
 
     def get_supported_tags(self) -> List[str]:
         """Get supported SSML tags."""

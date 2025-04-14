@@ -14,3 +14,5 @@ venv/
 *.log
 *.tmp
 *.bak
+
+data/

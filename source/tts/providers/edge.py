@@ -32,7 +32,10 @@ class EdgeTTS(TTSProvider):
 
         async def _generate(segment: SpeakerSegment) -> bytes:
             communicate = edge_tts.Communicate(segment.text, segment.voice_config.voice)
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+            # Ensure temp file is created in the configured directory
+            with tempfile.NamedTemporaryFile(
+                suffix=".mp3", delete=False, dir=self.config.temp_audio_dir
+            ) as tmp_file:
                 temp_path = tmp_file.name
 
             try:

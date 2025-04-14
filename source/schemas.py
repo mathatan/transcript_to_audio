@@ -42,7 +42,7 @@ class SpeakerConfig(BaseModel):
         default=0.85,
         description="Similarity boost in speech tone (ElevenLabs-specific).",
     )
-    style: Optional[int] = Field(
+    style: Optional[float] = Field(
         default=0, description="Style of speech delivery (ElevenLabs-specific)."
     )
     use_speaker_boost: Optional[bool] = Field(
@@ -141,7 +141,7 @@ class SpeakerSegment:
     Represents a segment of text associated with a specific speaker.
 
     Attributes:
-        speaker_id (int): The ID of the speaker (e.g., 1 for <speaker1>).
+        speaker_id (int): The ID of the speaker (e.g., 1 for <person1>).
         parameters (dict): Additional parameters extracted from the tag (e.g., {"param": "value"}).
         text (str): The text content of the segment.
         voice_config (dict): The voice configuration for the speaker.

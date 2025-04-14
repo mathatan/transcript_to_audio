@@ -7,10 +7,12 @@ including cleaning of input text and merging of audio files.
 """
 
 import logging
+import math
 import os
 import tempfile
 from typing import List, Tuple, Optional, Dict, Any, Union
 from pydub import AudioSegment
+from pydub.silence import split_on_silence
 
 from .tts.base import TTSProvider
 from .tts.factory import TTSProviderFactory
@@ -157,9 +159,68 @@ class TextToSpeech:
 
         return audio_files
 
+    @classmethod
+    def _normalize_audio_segments(
+        cls, audio_segments: List[AudioSegment]
+    ) -> List[AudioSegment]:
+        """
+        Normalize a list of audio segments to a consistent loudness level.
+
+        Args:
+            audio_segments: A list of AudioSegment objects to normalize.
+
+        Returns:
+            A list of normalized AudioSegment objects.
+        """
+        # Step 1: Calculate the RMS (loudness level) for each segment
+        loudness_levels = [segment.rms for segment in audio_segments]
+
+        # Step 2: Determine the target loudness level (mean RMS)
+        target_loudness = sum(loudness_levels) / len(loudness_levels)
+
+        # Step 3: Normalize each segment to the target loudness
+        normalized_segments = []
+        for segment, segment_loudness in zip(audio_segments, loudness_levels):
+            gain = 20 * math.log10(target_loudness / segment_loudness)
+            normalized_audio = segment.apply_gain(gain)
+            normalized_segments.append(normalized_audio)
+
+        return normalized_segments
+
+    @classmethod
+    def _split_audio_on_silence(cls, audio: AudioSegment) -> List[AudioSegment]:
+        """
+        Split the given audio into chunks based on silence detection.
+
+        Args:
+            audio: The combined audio segment to be split
+
+        Returns:
+            A list of audio chunks split based on silence
+        """
+        silence_threshold = -40  # Silence threshold in dB
+        min_silence_len = 2000  # Minimum silence duration (2 seconds)
+
+        try:
+            chunks = split_on_silence(  # Using split_on_silence from pydub.silence
+                audio,
+                min_silence_len=min_silence_len,
+                silence_thresh=silence_threshold,
+                keep_silence=500,
+            )
+
+            logger.info(
+                f"Detected {len(chunks)} chunks in the audio after silence detection."
+            )
+            return chunks[0] if len(chunks) > 1 else audio
+        except Exception as e:
+            logger.error(f"Error during silence detection: {str(e)}")
+            raise
+
     def _merge_audio_files(self, audio_files: List[str], output_file: str) -> None:
         """
-        Merge the provided audio files sequentially, ensuring questions come before answers.
+        Merge the provided audio files sequentially, ensuring questions come before answers,
+        and normalize the audio segments to a consistent loudness level.
 
         Args:
             audio_files: List of paths to audio files to merge
@@ -182,22 +243,31 @@ class TextToSpeech:
             # Sort files by index and type (question/answer)
             audio_files.sort(key=get_sort_key)
 
-            # Create empty audio segment
-            combined = AudioSegment.empty()
+            # Step 1: Load all audio segments
+            audio_segments = [
+                self._split_audio_on_silence(
+                    AudioSegment.from_file(file_path, format=self.audio_format)
+                )
+                for file_path in audio_files
+            ]
 
-            # Add each audio file to the combined segment
-            for file_path in audio_files:
-                combined += AudioSegment.from_file(file_path, format=self.audio_format)
+            # Step 2: Normalize all audio segments
+            normalized_segments = self._normalize_audio_segments(audio_segments)
+
+            # Step 3: Combine all normalized audio segments
+            combined = AudioSegment.empty()
+            for segment in normalized_segments:
+                combined += segment
 
             # Ensure output directory exists
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-            # Export the combined audio
+            # Step 4: Export the combined audio file
             combined.export(output_file, format=self.audio_format)
-            logger.info(f"Merged audio saved to {output_file}")
+            logger.info(f"Merged and normalized audio saved to {output_file}")
 
         except Exception as e:
-            logger.error(f"Error merging audio files: {str(e)}")
+            logger.error(f"Error merging and normalizing audio files: {str(e)}")
             raise
 
     def _ensure_directory_exists(self, path: str) -> str:

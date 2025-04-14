@@ -1,5 +1,7 @@
 """Google Cloud Text-to-Speech provider implementation."""
 
+import os  # Added
+import tempfile  # Added
 from google.cloud import texttospeech
 from typing import List
 from ..base import SpeakerSegment, TTSProvider
@@ -139,7 +141,7 @@ class GeminiMultiTTS(TTSProvider):
 
     def merge_audio(self, audio_chunks: List[bytes]) -> bytes:
         """
-        Merge multiple MP3 audio chunks into a single audio file.
+        Merge multiple MP3 audio chunks into a single audio file using temporary files.
 
         Args:
             audio_chunks (List[bytes]): List of MP3 audio data
@@ -154,46 +156,50 @@ class GeminiMultiTTS(TTSProvider):
             return audio_chunks[0]
 
         try:
-            # Initialize combined audio with first chunk
             combined = None
             valid_chunks = []
+            temp_files_to_clean = []  # Keep track of temp files
 
             for i, chunk in enumerate(audio_chunks):
+                temp_file_path = None
                 try:
-                    # Ensure chunk is not empty
                     if not chunk or len(chunk) == 0:
                         logger.warning(f"Skipping empty chunk {i}")
                         continue
 
-                    # Save chunk to temporary file for ffmpeg to process
-                    temp_file = f"temp_chunk_{i}.mp3"
-                    with open(temp_file, "wb") as f:
-                        f.write(chunk)
+                    # Create a named temporary file in the configured directory
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".mp3", delete=False, dir=self.config.temp_audio_dir
+                    ) as tmp_file:
+                        temp_file_path = tmp_file.name
+                        tmp_file.write(chunk)
+                        temp_files_to_clean.append(
+                            temp_file_path
+                        )  # Add to cleanup list
 
-                    # Create audio segment from temp file
-                    try:
-                        segment = AudioSegment.from_file(temp_file, format="mp3")
-                        if len(segment) > 0:
-                            valid_chunks.append(segment)
-                            logger.debug(f"Successfully processed chunk {i}")
-                        else:
-                            logger.warning(f"Zero-length segment in chunk {i}")
-                    except Exception as e:
-                        logger.error(f"Error processing chunk {i}: {str(e)}")
-
-                    # Clean up temp file
-                    import os
-
-                    try:
-                        os.remove(temp_file)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to remove temp file {temp_file}: {str(e)}"
+                    # Create audio segment from the temporary file
+                    segment = AudioSegment.from_file(temp_file_path, format="mp3")
+                    if len(segment) > 0:
+                        valid_chunks.append(segment)
+                        logger.debug(
+                            f"Successfully processed chunk {i} using {temp_file_path}"
                         )
+                    else:
+                        logger.warning(f"Zero-length segment in chunk {i}")
 
                 except Exception as e:
-                    logger.error(f"Error handling chunk {i}: {str(e)}")
-                    continue
+                    logger.error(f"Error processing chunk {i}: {str(e)}")
+                    # Attempt cleanup even if processing failed for this chunk
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        try:
+                            os.remove(temp_file_path)
+                            if temp_file_path in temp_files_to_clean:
+                                temp_files_to_clean.remove(temp_file_path)
+                        except OSError as rm_err:
+                            logger.warning(
+                                f"Could not remove temp file {temp_file_path} after error: {rm_err}"
+                            )
+                    continue  # Continue to next chunk
 
             if not valid_chunks:
                 raise RuntimeError("No valid audio chunks to merge")
@@ -203,11 +209,11 @@ class GeminiMultiTTS(TTSProvider):
             for segment in valid_chunks[1:]:
                 combined = combined + segment
 
-            # Export with specific parameters
+            # Export combined audio
             output = BytesIO()
             combined.export(output, format="mp3", codec="libmp3lame", bitrate="320k")
-
             result = output.getvalue()
+
             if len(result) == 0:
                 raise RuntimeError("Export produced empty output")
 
@@ -215,12 +221,23 @@ class GeminiMultiTTS(TTSProvider):
 
         except Exception as e:
             logger.error(f"Audio merge failed: {str(e)}", exc_info=True)
-            # If merging fails, return the first valid chunk as fallback
+            # Fallback logic remains the same
             if audio_chunks:
                 return audio_chunks[0]
             raise RuntimeError(
                 f"Failed to merge audio chunks and no valid fallback found: {str(e)}"
             )
+        finally:
+            # Final cleanup of all successfully created temp files
+            for temp_file_path in temp_files_to_clean:
+                if os.path.exists(temp_file_path):
+                    try:
+                        os.remove(temp_file_path)
+                        logger.debug(f"Cleaned up temp file: {temp_file_path}")
+                    except OSError as e:
+                        logger.warning(
+                            f"Could not remove temp file {temp_file_path} during final cleanup: {e}"
+                        )
 
     def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
@@ -269,7 +286,7 @@ class GeminiMultiTTS(TTSProvider):
 
         except Exception as e:
             logger.error(f"Failed to generate audio: {str(e)}", exc_info=True)
-            raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
+            raise RuntimeError(f"Failed to generate audio: {str(e)}")  # from e
 
     def get_supported_tags(self) -> List[str]:
         """Get supported SSML tags."""

@@ -73,7 +73,7 @@ class TTSProvider(ABC):
         Parse input text into a list of SpeakerSegment instances.
 
         Args:
-            input_text (str): The input text containing <speakerN> tags.
+            input_text (str): The input text containing <personN> tags.
             supported_tags (List[str]): Supported SSML tags.
 
         Returns:
@@ -85,8 +85,8 @@ class TTSProvider(ABC):
         # Clean the input text
         input_text = self.clean_tss_markup(input_text, supported_tags=supported_tags)
 
-        # Regular expression pattern to match <speakerN> tags
-        pattern = r"<speaker(\d+)(.*?)>(.*?)</speaker\1>"
+        # Regular expression pattern to match <personN> tags
+        pattern = r"<person(\d+)(.*?)>(.*?)</person\1>"
         matches = re.findall(pattern, input_text, re.DOTALL | re.IGNORECASE)
 
         segments: List[SpeakerSegment] = []
@@ -148,31 +148,48 @@ class TTSProvider(ABC):
         all_supported_tags = supported_tags + additional_tags
 
         # Create a pattern that matches any tag not in the supported list
+        # pattern = (
+        #     r"</?(?!(?:"
+        #     + "|".join(all_supported_tags + [person_tag_pattern])
+        #     + r")\b)[^>]+>"
+        # )
+        # Define a regex pattern for unsupported tags to be removed
+        # Define a regex pattern to look for unsupported tags (excluding supported tags with optional properties)
         pattern = (
-            r"</?(?!(?:"
+            r"</?(?!("
             + "|".join(all_supported_tags + [person_tag_pattern])
             + r")\b)[^>]+>"
         )
 
-        # Remove unsupported tags
-        cleaned_text = re.sub(pattern, "", input_text)
+        # Remove unsupported tags using the defined `pattern`
+        cleaned_text = re.sub(
+            pattern,
+            "",
+            input_text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
 
         # Remove any leftover empty lines
-        cleaned_text = re.sub(r"\n\s*\n", "\n", cleaned_text)
+        cleaned_text = re.sub(
+            r"\n\s*\n",
+            "\n",
+            cleaned_text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
 
-        # Ensure closing tags for additional tags are preserved
+        # Ensure closing tags for additional tags are preserved, while retaining properties
         for tag in additional_tags:
             cleaned_text = re.sub(
-                f"<{tag}>(.*?)(?=<|$)",
-                f"<{tag}>\\1</{tag}>",
+                f"<{tag}( [^>]+)?>(.*?)(?=<|$)",  # Match opening tags with optional properties
+                f"<{tag}\\1>\\2</{tag}>",  # Reinsert the opening tag with its properties if present
                 cleaned_text,
                 flags=re.DOTALL | re.IGNORECASE,
             )
 
-        # Ensure closing tags for person tags are preserved
+        # Ensure closing tags for person-specific tags are preserved, while retaining properties
         cleaned_text = re.sub(
-            f"<({person_tag}\\d+)>(.*?)(?=<|$)",
-            "<\\1>\\2</\\1>",
+            f"<({person_tag}\\d+)( [^>]+)?>(.*?)(?=<|$)",  # Match opening tags with optional properties
+            "<\\1\\2>\\3</\\1>",  # Reinsert the opening tag with its properties if present
             cleaned_text,
             flags=re.DOTALL | re.IGNORECASE,
         )

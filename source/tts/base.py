@@ -1,38 +1,10 @@
 """Abstract base class for Text-to-Speech providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, ClassVar, Tuple, Dict
+from typing import List, ClassVar, Dict
 import re
 
-
-class SpeakerSegment:
-    """
-    Represents a segment of text associated with a specific speaker.
-
-    Attributes:
-        speaker_id (int): The ID of the speaker (e.g., 1 for <speaker1>).
-        parameters (dict): Additional parameters extracted from the tag (e.g., {"param": "value"}).
-        text (str): The text content of the segment.
-        voice_config (dict): The voice configuration for the speaker.
-    """
-
-    def __init__(
-        self,
-        speaker_id: int,
-        parameters: Dict[str, str],
-        text: str,
-        voice_config: Dict[str, str],
-    ):
-        self.speaker_id = speaker_id
-        self.parameters = parameters
-        self.text = text
-        self.voice_config = voice_config
-
-    def __repr__(self):
-        return (
-            f"SpeakerSegment(speaker_id={self.speaker_id}, "
-            f"parameters={self.parameters}, text={self.text}, voice_config={self.voice_config})"
-        )
+from ..schemas import SpeakerConfig, SpeakerSegment, TTSConfig
 
 
 class TTSProvider(ABC):
@@ -40,6 +12,15 @@ class TTSProvider(ABC):
 
     # Common SSML tags supported by most providers
     COMMON_SSML_TAGS: ClassVar[List[str]] = ["lang", "p", "phoneme", "s", "sub"]
+
+    def __init__(self, config: TTSConfig):
+        """
+        Initialize the TTS provider with configuration.
+
+        Args:
+            config (TTSConfig): Configuration object.
+        """
+        self.config = config
 
     @abstractmethod
     def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
@@ -87,19 +68,19 @@ class TTSProvider(ABC):
 
     def split_qa(
         self, input_text: str, supported_tags: List[str] = None
-    ) -> List[Tuple[SpeakerSegment, SpeakerSegment]]:
+    ) -> List[SpeakerSegment]:
         """
-        Parse input text into tuples of SpeakerSegment instances.
+        Parse input text into a list of SpeakerSegment instances.
 
         Args:
             input_text (str): The input text containing <speakerN> tags.
             supported_tags (List[str]): Supported SSML tags.
 
         Returns:
-            List[Tuple[SpeakerSegment, SpeakerSegment]]: A list of tuples containing SpeakerSegment instances.
+            List[SpeakerSegment]: A list of SpeakerSegment instances.
         """
-        # Retrieve predefined configurations from tts_config
-        predefined_configs = self.tts_config.get("speaker_configs", {})
+        # Retrieve predefined configurations from the TTSConfig object
+        predefined_configs: Dict[int, SpeakerConfig] = self.config.speaker_configs
 
         # Clean the input text
         input_text = self.clean_tss_markup(input_text, supported_tags=supported_tags)
@@ -108,7 +89,7 @@ class TTSProvider(ABC):
         pattern = r"<speaker(\d+)(.*?)>(.*?)</speaker\1>"
         matches = re.findall(pattern, input_text, re.DOTALL | re.IGNORECASE)
 
-        segments = []
+        segments: List[SpeakerSegment] = []
         for speaker_id, params, text in matches:
             speaker_id = int(speaker_id)
 
@@ -118,29 +99,25 @@ class TTSProvider(ABC):
             # Retrieve default configuration for the speaker ID
             default_config = predefined_configs.get(speaker_id, {}).copy()
 
-            # Overwrite default configuration with parameters from the tag
-            voice_config = {**default_config, **param_dict}
+            # Identify fields in param_dict that match the SpeakerConfig schema
+            schema_fields = SpeakerConfig.model_fields.keys()
+            matched_fields = {
+                key: value for key, value in param_dict.items() if key in schema_fields
+            }
+
+            # Only create a new instance if there are matching fields; otherwise, use default_config directly
+            if matched_fields:
+                updated_config = {**default_config, **matched_fields}
+                speaker_config = SpeakerConfig.model_validate(updated_config)
+            else:
+                speaker_config = SpeakerConfig.model_validate(default_config)
 
             segments.append(
-                SpeakerSegment(speaker_id, param_dict, text.strip(), voice_config)
+                SpeakerSegment(speaker_id, param_dict, text.strip(), speaker_config)
             )
 
-        # Combine consecutive segments with the same speaker_id
-        combined_segments = []
-        for segment in segments:
-            if (
-                combined_segments
-                and combined_segments[-1].speaker_id == segment.speaker_id
-            ):
-                combined_segments[-1].text += " " + segment.text
-            else:
-                combined_segments.append(segment)
-
-        # Return tuples of question-answer pairs (default: speaker 1 = question, speaker 2 = answer)
-        return [
-            (combined_segments[i], combined_segments[i + 1])
-            for i in range(0, len(combined_segments), 2)
-        ]
+        # Return the list of combined SpeakerSegments
+        return segments
 
     def clean_tss_markup(
         self,

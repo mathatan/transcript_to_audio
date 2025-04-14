@@ -9,24 +9,32 @@ including cleaning of input text and merging of audio files.
 import logging
 import os
 import tempfile
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Union
 from pydub import AudioSegment
 
 from .tts.base import TTSProvider
 from .tts.factory import TTSProviderFactory
+from .schemas import SpeakerConfig, TTSConfig  # Import from the new schemas file
 
 logger = logging.getLogger(__name__)
 
 
+# Default speaker configurations using the Pydantic model
+DEFAULT_SPEAKER_1 = SpeakerConfig()
+DEFAULT_SPEAKER_2 = SpeakerConfig(voice="default_voice_2")
+
+
 class TextToSpeech:
-    provider_config: Dict[str, Any] = None
-    tts_config: Dict[str, Any] = None
+    tts_config: TTSConfig
     provider: TTSProvider
+    speaker_configs: Dict[int, SpeakerConfig] = (
+        None  # Will hold the final SpeakerConfig objects
+    )
 
     def __init__(
         self,
         provider: str = "elevenlabs",
-        tts_config: Optional[Dict[str, Any]] = {},
+        tts_config: Optional[Union[Dict[str, Any], TTSConfig]] = None,
     ):
         """
         Initialize the TextToSpeech class.
@@ -35,48 +43,72 @@ class TextToSpeech:
             provider (str): The provider to use for text-to-speech conversion.
                 Options are 'elevenlabs', 'gemini', 'openai', 'edge' or 'geminimulti'.
                 Defaults to 'elevenlabs'.
-            tts_config (Optional[Dict]): Configuration for TTS settings.
+            tts_config (Optional[Union[Dict, TTSConfig]]): Configuration for TTS settings.
+                                       Can be a dictionary or a TTSConfig instance.
+                                       If a dictionary is provided, it will be parsed into TTSConfig.
+                                       If None, default TTSConfig settings will be used.
         """
-        self.tts_config = tts_config
-        default_speaker_configs = {
-            1: {
-                "voice": "default_voice_1",
-                "language": "en-US",
-                "pitch": "default",
-                "speaking_rate": "1.0",
-                "stability": 0.75,  # ElevenLabs-specific
-                "similarity_boost": 0.85,  # ElevenLabs-specific
-                "style": 0,  # ElevenLabs-specific
-                "ssml_gender": "NEUTRAL",  # Gemini-specific
-            },
-            2: {
-                "voice": "default_voice_2",
-                "language": "en-US",
-                "pitch": "default",
-                "speaking_rate": "1.0",
-                "stability": 0.75,
-                "similarity_boost": 0.85,
-                "style": 0,
-                "ssml_gender": "NEUTRAL",
-            },
-        }
-        self.tts_config["speaker_configs"] = {
-            speaker_id: {
-                **default_speaker_configs.get(speaker_id, {}),
-                **self.tts_config.get("speaker_configs", {}).get(speaker_id, {}),
-            }
-            for speaker_id in set(default_speaker_configs)
-            | set(self.tts_config.get("speaker_configs", {}))
-        }
+        # Instantiate TTSConfig if a dict is passed, or use the instance directly.
+        if isinstance(tts_config, dict):
+            self.tts_config = TTSConfig(**tts_config)
+        elif isinstance(tts_config, TTSConfig):
+            self.tts_config = tts_config
+        else:
+            self.tts_config = TTSConfig()  # Use default if None or invalid type
 
-        # Initialize provider using factory
+        processed_speaker_configs = {}
+
+        # Check if user provided speaker configurations and process them
+        # Access speaker_configs via TTSConfig attribute
+        incoming_configs = self.tts_config.speaker_configs
+        if isinstance(
+            incoming_configs, dict
+        ):  # Still check if it's a dict, as it comes from TTSConfig
+            for speaker_id, config_value in incoming_configs.items():
+                try:
+                    sid = int(speaker_id)
+                    if isinstance(config_value, SpeakerConfig):
+                        # Use the instance directly if it's already a SpeakerConfig
+                        processed_speaker_configs[sid] = config_value
+                    elif isinstance(config_value, dict):
+                        # Parse the dictionary into a SpeakerConfig instance
+                        processed_speaker_configs[sid] = SpeakerConfig(**config_value)
+                    else:
+                        logger.warning(
+                            f"Invalid type for speaker config {sid}: {type(config_value)}. Skipping."
+                        )
+                        raise ValueError(
+                            f"Invalid type for speaker config {sid}: {type(config_value)}"
+                        )
+                except (ValueError, TypeError) as e:
+                    #  logger.warning(f"Error processing speaker config for ID '{speaker_id}': {e}. Skipping.")
+                    raise ValueError(
+                        f"Error processing speaker config for ID '{speaker_id}': {e}"
+                    )
+
+        # If no valid configs were processed or provided, use defaults
+        if not processed_speaker_configs:
+            self.speaker_configs = {1: DEFAULT_SPEAKER_1, 2: DEFAULT_SPEAKER_2}
+        else:
+            # Ensure default speakers 1 and 2 are present if not provided by user
+            if 1 not in processed_speaker_configs:
+                processed_speaker_configs[1] = DEFAULT_SPEAKER_1
+            if 2 not in processed_speaker_configs:
+                processed_speaker_configs[2] = DEFAULT_SPEAKER_2
+            self.speaker_configs = processed_speaker_configs
+
+        # Update the speaker_configs within the TTSConfig instance
+        self.tts_config.speaker_configs = self.speaker_configs
+
+        # Initialize provider using factory, passing the TTSConfig instance
         self.provider = TTSProviderFactory.create(
             provider_name=provider, config=self.tts_config
         )
 
         # Setup directories and config
         self._setup_directories()
-        self.audio_format = self.tts_config.get("audio_format", "mp3")
+        # Access audio_format via TTSConfig attribute
+        self.audio_format = self.tts_config.audio_format
 
     def convert_to_speech(self, text: str, output_file: str) -> None:
         """
@@ -107,10 +139,8 @@ class TextToSpeech:
     def _generate_audio_segments(self, text: str, temp_dir: str) -> List[str]:
         """Generate audio segments for each Q&A pair."""
         # Parse the input text into SpeakerSegment instances
-        qa_pairs = self.provider.split_qa(text, self.provider.get_supported_tags())
-        segments = [
-            segment for pair in qa_pairs for segment in pair
-        ]  # Flatten the list of pairs
+        segments = self.provider.split_qa(text, self.provider.get_supported_tags())
+
         audio_files = []
 
         # Generate audio for all segments in a single call
@@ -170,25 +200,26 @@ class TextToSpeech:
             logger.error(f"Error merging audio files: {str(e)}")
             raise
 
+    def _ensure_directory_exists(self, path: str) -> str:
+        """Ensure a directory exists, resolving relative paths to absolute."""
+        if not os.path.isabs(path):
+            base_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), os.pardir)
+            )
+            path = os.path.join(base_dir, path)
+        os.makedirs(path, exist_ok=True)
+        return path
+
     def _setup_directories(self) -> None:
         """Setup required directories for audio processing."""
-        self.output_directories = self.tts_config.get("output_directories", {})
-        temp_dir = (
-            self.tts_config.get("temp_audio_dir", "data/audio/tmp/")
-            .rstrip("/")
-            .split("/")
-        )
-        self.temp_audio_dir = os.path.join(*temp_dir)
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-        self.temp_audio_dir = os.path.join(base_dir, self.temp_audio_dir)
+        self.output_directories = self.tts_config.output_directories
+        temp_dir_path = self.tts_config.temp_audio_dir
+        self.temp_audio_dir = self._ensure_directory_exists(temp_dir_path)
 
-        os.makedirs(self.temp_audio_dir, exist_ok=True)
-
-        # Create directories if they don't exist
-        for dir_path in [
-            self.output_directories.get("transcripts"),
-            self.output_directories.get("audio"),
-            self.temp_audio_dir,
-        ]:
-            if dir_path and not os.path.exists(dir_path):
-                os.makedirs(dir_path)
+        # Create output directories if they don't exist
+        for dir_key in ["transcripts", "audio"]:
+            dir_path = self.output_directories.get(dir_key)
+            if dir_path:
+                self.output_directories[dir_key] = self._ensure_directory_exists(
+                    dir_path
+                )

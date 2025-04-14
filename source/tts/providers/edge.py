@@ -3,19 +3,22 @@
 import edge_tts
 import os
 import tempfile
-from typing import List, Dict, Any
+from typing import List
 from ..base import SpeakerSegment, TTSProvider
+from ...schemas import TTSConfig
 
 
 class EdgeTTS(TTSProvider):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize Edge TTS provider.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        self.model = config.get("model", "default")
+        super().__init__(config)
+        # Use the model from config or default to "default" if None
+        self.model = config.model or "default"
 
     def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
@@ -28,9 +31,7 @@ class EdgeTTS(TTSProvider):
         nest_asyncio.apply()
 
         async def _generate(segment: SpeakerSegment) -> bytes:
-            communicate = edge_tts.Communicate(
-                segment.text, segment.voice_config["voice"]
-            )
+            communicate = edge_tts.Communicate(segment.text, segment.voice_config.voice)
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
                 temp_path = tmp_file.name
 

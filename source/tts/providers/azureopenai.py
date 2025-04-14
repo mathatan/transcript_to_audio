@@ -2,8 +2,9 @@
 
 import logging
 from openai import AzureOpenAI
-from typing import List, Dict, Any
+from typing import List
 from ..base import SpeakerSegment, TTSProvider
+from ...schemas import TTSConfig
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +12,18 @@ logger = logging.getLogger(__name__)
 class AzureOpenAITTS(TTSProvider):
     """Azure OpenAI Text-to-Speech provider."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize Azure OpenAI TTS provider.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        self.api_base = config.get("api_base")
-        self.api_key = config.get("api_key")
-        self.api_version = config.get("api_version", "2025-01-01-preview")
-        self.deployment = config.get("deployment")
+        super().__init__(config)
+        self.api_base = config.api_base
+        self.api_key = config.api_key
+        self.api_version = config.api_version
+        self.deployment = config.deployment
 
         if not all([self.api_base, self.api_key, self.deployment]):
             raise ValueError(
@@ -50,7 +52,7 @@ class AzureOpenAITTS(TTSProvider):
             try:
                 response = self.client.audio.speech.create(
                     model="gpt-4o-audio-preview",
-                    voice=segment.voice_config.get("voice", "alloy"),
+                    voice=segment.voice_config.voice or "alloy",
                     input=segment.text,
                 )
                 audio_chunks.append(response.content)

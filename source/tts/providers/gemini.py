@@ -1,8 +1,9 @@
 """Google Cloud Text-to-Speech provider implementation for single speaker."""
 
 from google.cloud import texttospeech
-from typing import List, Dict, Any
+from typing import List
 from ..base import SpeakerSegment, TTSProvider
+from ...schemas import TTSConfig
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,17 +12,19 @@ logger = logging.getLogger(__name__)
 class GeminiTTS(TTSProvider):
     """Google Cloud Text-to-Speech provider for single speaker."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize Google Cloud TTS provider.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        self.model = config.get("model", "en-US-Journey-F")
+        super().__init__(config)
+        # Use the model from config or default to "en-US-Journey-F" if None
+        self.model = config.model or "en-US-Journey-F"
         try:
             self.client = texttospeech.TextToSpeechClient(
-                client_options={"api_key": config.get("api_key")}
+                client_options={"api_key": config.api_key}
             )
             logger.info("Successfully initialized GeminiTTS client")
         except Exception as e:
@@ -43,7 +46,8 @@ class GeminiTTS(TTSProvider):
                 synthesis_input = texttospeech.SynthesisInput(text=segment.text)
 
                 # Set voice parameters
-                ssml_gender = segment.voice_config.get("ssml_gender", "NEUTRAL").upper()
+                # Ensure ssml_gender is uppercase and handle potential None
+                ssml_gender = (segment.voice_config.ssml_gender or "NEUTRAL").upper()
                 ssml_gender_enum = getattr(
                     texttospeech.SsmlVoiceGender,
                     ssml_gender,
@@ -51,8 +55,8 @@ class GeminiTTS(TTSProvider):
                 )
 
                 voice_params = texttospeech.VoiceSelectionParams(
-                    language_code=segment.voice_config["language"],
-                    name=segment.voice_config["voice"],
+                    language_code=segment.voice_config.language,
+                    name=segment.voice_config.voice,
                     ssml_gender=ssml_gender_enum,
                 )
 

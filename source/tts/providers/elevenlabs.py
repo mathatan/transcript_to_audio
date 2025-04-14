@@ -1,23 +1,30 @@
 """ElevenLabs TTS provider implementation."""
 
 import logging
-from elevenlabs import client as elevenlabs_client
+from elevenlabs import VoiceSettings, client as elevenlabs_client
 from ..base import SpeakerSegment, TTSProvider
-from typing import Dict, List, Any
+from typing import List
+from ...schemas import TTSConfig
 
 logger = logging.getLogger(__name__)
 
 
 class ElevenLabsTTS(TTSProvider):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize ElevenLabs TTS provider.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        self.client = elevenlabs_client.ElevenLabs(api_key=config["api_key"])
-        self.model = config.get("model", "eleven_multilingual_v2")
+        super().__init__(config)
+        if not config.api_key:
+            raise ValueError(
+                "ElevenLabs API key must be provided in the configuration."
+            )
+        self.client = elevenlabs_client.ElevenLabs(api_key=config.api_key)
+        # Use the model from config or default to "eleven_multilingual_v2" if None
+        self.model = config.model or "eleven_multilingual_v2"
 
     def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
         """
@@ -40,19 +47,17 @@ class ElevenLabsTTS(TTSProvider):
             )
 
             # Prepare voice settings
-            voice_settings: Dict[str, float | bool] = {
-                "stability": segment.voice_config.get("stability"),
-                "similarity_boost": segment.voice_config.get("similarity_boost"),
-                "style": segment.voice_config.get("style", 0),
-                "use_speaker_boost": segment.voice_config.get(
-                    "use_speaker_boost", True
-                ),
-            }
+            voice_settings: VoiceSettings = VoiceSettings(
+                stability=segment.voice_config.stability,
+                similarity_boost=segment.voice_config.similarity_boost,
+                style=segment.voice_config.style,
+                use_speaker_boost=segment.voice_config.use_speaker_boost,
+            )
 
             # Generate audio
             audio = self.client.generate(
                 text=segment.text,
-                voice=segment.voice_config["voice"],
+                voice=segment.voice_config.voice,
                 model=self.model,
                 previous_text=previous_text,
                 next_text=next_text,

@@ -1,6 +1,5 @@
 """Factory for creating TTS provider instances."""
 
-from typing import Dict, Any
 from .providers.edge import EdgeTTS
 from .providers.elevenlabs import ElevenLabsTTS
 from .providers.gemini import GeminiTTS
@@ -8,6 +7,7 @@ from .providers.geminimulti import GeminiMultiTTS
 from .providers.openai import OpenAITTS
 from .providers.azureopenai import AzureOpenAITTS
 from .base import TTSProvider
+from ..schemas import TTSConfig
 
 
 class TTSProviderFactory:
@@ -25,13 +25,13 @@ class TTSProviderFactory:
     }
 
     @staticmethod
-    def create(provider_name: str, config: Dict[str, Any]) -> TTSProvider:
+    def create(provider_name: str, config: TTSConfig) -> TTSProvider:
         """
         Create a TTS provider instance.
 
         Args:
             provider_name (str): Name of the provider (e.g., 'edge', 'elevenlabs').
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object for the provider.
 
         Returns:
             TTSProvider: An instance of the requested TTS provider.

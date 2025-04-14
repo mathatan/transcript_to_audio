@@ -2,8 +2,9 @@
 
 import logging
 import openai
-from typing import List, Dict, Any
+from typing import List
 from ..base import SpeakerSegment, TTSProvider
+from ...schemas import TTSConfig
 
 logger = logging.getLogger(__name__)
 
@@ -14,23 +15,29 @@ class OpenAITTS(TTSProvider):
     # Provider-specific SSML tags
     PROVIDER_SSML_TAGS: List[str] = ["break", "emphasis"]
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize OpenAI TTS provider.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        api_key = config.get("api_key")
+        super().__init__(config)
+        api_key = config.api_key
         if api_key:
             openai.api_key = api_key
-        elif not openai.api_key:
-            raise ValueError("OpenAI API key must be provided or set in environment")
-        self.model = config.get("model", "tts-1-hd")
-        self.response_format = config.get("response_format", "mp3")
-        self.streaming = config.get("streaming", False)
-        self.speed = config.get("speed", 1.0)
-        self.language = config.get("language", "en")
+        elif (
+            not openai.api_key
+        ):  # Check if it was set via environment variable if not in config
+            raise ValueError(
+                "OpenAI API key must be provided in config or set in environment"
+            )
+        # Use values from config or defaults if None
+        self.model = config.model or "tts-1-hd"
+        self.response_format = config.response_format
+        self.streaming = config.streaming
+        self.speed = config.speed
+        self.language = config.language
 
         # Validate response format
         valid_formats = ["mp3", "opus", "aac", "flac", "wav", "pcm"]
@@ -61,7 +68,7 @@ class OpenAITTS(TTSProvider):
             try:
                 response = openai.audio.speech.create(
                     model=self.model,
-                    voice=segment.voice_config.get("voice", "default"),
+                    voice=segment.voice_config.voice,
                     input=segment.text,
                     response_format=self.response_format,
                     speed=self.speed,

@@ -1,8 +1,9 @@
 """Google Cloud Text-to-Speech provider implementation."""
 
 from google.cloud import texttospeech
-from typing import List, Dict, Any
+from typing import List
 from ..base import SpeakerSegment, TTSProvider
+from ...schemas import TTSConfig
 import re
 import logging
 from io import BytesIO
@@ -14,17 +15,19 @@ logger = logging.getLogger(__name__)
 class GeminiMultiTTS(TTSProvider):
     """Google Cloud Text-to-Speech provider with multi-speaker support."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: TTSConfig):
         """
         Initialize Google Cloud TTS provider with multi-speaker support.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary from tts_config.
+            config (TTSConfig): Configuration object.
         """
-        self.model = config.get("model", "en-US-Studio-MultiSpeaker")
+        super().__init__(config)
+        # Use the model from config or default to "en-US-Studio-MultiSpeaker" if None
+        self.model = config.model or "en-US-Studio-MultiSpeaker"
         try:
             self.client = texttospeech.TextToSpeechClient(
-                client_options={"api_key": config.get("api_key")}
+                client_options={"api_key": config.api_key}
             )
             logger.info("Successfully initialized GeminiMultiTTS client")
         except Exception as e:
@@ -233,7 +236,7 @@ class GeminiMultiTTS(TTSProvider):
                 turns=[
                     texttospeech.MultiSpeakerMarkup.Turn(
                         text=segment.text.strip(),
-                        speaker=segment.voice_config["voice"],
+                        speaker=segment.voice_config.voice,
                     )
                     for segment in segments
                 ]

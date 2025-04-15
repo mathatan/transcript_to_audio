@@ -5,7 +5,7 @@ description = "A library for turning a transcript into a audio file."
 authors = ["Markus Haverinen <mathatan@gmail.com>"]
 readme = "README.md"
 packages = [
-  { include = "source" }
+  { include = "transcript_to_audio" }
 ]
 
 [tool.poetry.dependencies]

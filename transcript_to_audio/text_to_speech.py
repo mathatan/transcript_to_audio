@@ -15,7 +15,7 @@ import uuid
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
-from source.tts.providers.geminimulti import GeminiMultiTTS
+from transcript_to_audio.tts.providers.geminimulti import GeminiMultiTTS
 
 from .tts.base import TTSProvider
 from .tts.factory import TTSProviderFactory

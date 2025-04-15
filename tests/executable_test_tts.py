@@ -3,8 +3,8 @@ import os
 # import tempfile # No longer needed
 from dotenv import load_dotenv
 
-from source.text_to_speech import TextToSpeech
-from source.schemas import TTSConfig, SpeakerConfig
+from transcript_to_audio.text_to_speech import TextToSpeech
+from transcript_to_audio.schemas import TTSConfig, SpeakerConfig
 
 import logging
 

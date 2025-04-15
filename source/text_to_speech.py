@@ -119,7 +119,9 @@ class TextToSpeech:
         # Access audio_format via TTSConfig attribute
         self.audio_format = self.tts_config.audio_format
 
-    def convert_to_speech(self, text: str, output_file: str) -> None:
+    def convert_to_speech(
+        self, text: str, output_file: Optional[str], save_to_file: bool = False
+    ) -> Tuple[str, AudioSegment]:
         """
         Convert input text to speech and save as an audio file.
 
@@ -138,8 +140,24 @@ class TextToSpeech:
                 audio_segments = self._generate_audio_segments(cleaned_text, temp_dir)
 
                 # Merge audio files into a single output
-                self._merge_audio_files(audio_segments, output_file)
-                logger.info(f"Audio saved to {output_file}")
+                segments, audio = self._merge_audio_files(
+                    audio_segments, output_file, save_to_file
+                )
+
+                new_transcript = "\n".join([segment.to_tag() for segment in segments])
+                if save_to_file:
+                    logger.info(f"Audio saved to {output_file}")
+                    transcript_file = (
+                        f"{os.path.splitext(output_file)[0]}_transcript.txt"
+                    )
+
+                    with open(
+                        transcript_file, "w", encoding="utf-8"
+                    ) as transcript_output:
+                        transcript_output.write(new_transcript)
+                    logger.info(f"Transcript saved to {transcript_file}")
+
+                return (new_transcript, audio)
 
         except Exception as e:
             logger.error(f"Error converting text to speech: {str(e)}")
@@ -182,7 +200,7 @@ class TextToSpeech:
 
     @classmethod
     def _normalize_audio_segments(
-        cls, audio_segments: List[AudioSegment]
+        cls, audio_segments: List[Tuple[Union[SpeakerSegment, None], AudioSegment]]
     ) -> List[AudioSegment]:
         """
         Normalize a list of audio segments to a consistent loudness level.
@@ -194,23 +212,27 @@ class TextToSpeech:
             A list of normalized AudioSegment objects.
         """
         # Step 1: Calculate the RMS (loudness level) for each segment
-        loudness_levels = [segment.rms for segment in audio_segments]
+        loudness_levels = [segment[1].rms for segment in audio_segments]
 
         # Step 2: Determine the target loudness level (mean RMS)
         target_loudness = sum(loudness_levels) / len(loudness_levels)
 
         # Step 3: Normalize each segment to the target loudness
         normalized_segments = []
-        for segment, segment_loudness in zip(audio_segments, loudness_levels):
+        for segment_tuple, segment_loudness in zip(audio_segments, loudness_levels):
+
             gain = 20 * math.log10(target_loudness / segment_loudness)
-            normalized_audio = segment.apply_gain(gain)
+            normalized_audio = segment_tuple[1].apply_gain(gain)
+            if segment_tuple[0] is not None:
+                segment_tuple[0].audio_segment = normalized_audio
+
             normalized_segments.append(normalized_audio)
 
         return normalized_segments
 
     def _split_audio_on_silence(
         self, audio: AudioSegment, speaker_segment: SpeakerSegment
-    ) -> AudioSegment:
+    ) -> Tuple[SpeakerSegment, AudioSegment]:
         """
         Split the given audio into chunks based on silence detection.
 
@@ -243,19 +265,26 @@ class TextToSpeech:
                 if len(chunks) > 1:
                     # Drop the last chunk and concatenate the remaining ones
                     merged_audio = sum(chunks[:-1])
-                    return merged_audio
-                return audio  # Return the original audio if only one chunk
+                    speaker_segment.audio_segment = merged_audio
+                    return (speaker_segment, merged_audio)
+                speaker_segment.audio_segment = audio
+                return (
+                    speaker_segment,
+                    audio,
+                )  # Return the original audio if only one chunk
             except Exception as e:
                 logger.error(f"Error during silence detection: {str(e)}")
                 raise
         else:
-            return audio
+            speaker_segment.audio_segment = audio
+            return (speaker_segment, audio)
 
     def _merge_audio_files(
         self,
         audio_files: tuple[List[SpeakerSegment], Union[str | None]],
-        output_file: str,
-    ) -> None:
+        output_file: Optional[str],
+        save_to_file: bool = False,
+    ) -> Tuple[List[SpeakerSegment], AudioSegment]:
         """
         Merge the provided audio files sequentially, ensuring questions come before answers,
         and normalize the audio segments to a consistent loudness level.
@@ -267,11 +296,20 @@ class TextToSpeech:
 
         try:
             if audio_files[1] is not None:
-                audio_segments = [
-                    AudioSegment.from_file(audio_files[1], format=self.audio_format)
+                audio_segments: List[
+                    Tuple[Union[SpeakerSegment, None], AudioSegment]
+                ] = [
+                    (
+                        None,
+                        AudioSegment.from_file(
+                            audio_files[1], format=self.audio_format
+                        ),
+                    )
                 ]
             else:
-                audio_segments = [
+                audio_segments: List[
+                    Tuple[Union[SpeakerSegment, None], AudioSegment]
+                ] = [
                     self._split_audio_on_silence(
                         AudioSegment.from_file(
                             segment.audio_file, format=self.audio_format
@@ -289,12 +327,24 @@ class TextToSpeech:
             for segment in normalized_segments:
                 combined += segment
 
-            # Ensure output directory exists
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            segments: List[SpeakerSegment] = []
+            cur_time = 0
+            for segment in audio_files[0]:
+                segment.audio_length = segment.audio_segment.__len__()
+                segment.start_time = cur_time
+                cur_time += segment.audio_length
+                segment.end_time = cur_time
+                segments.append(segment)
 
-            # Step 4: Export the combined audio file
-            combined.export(output_file, format=self.audio_format)
-            logger.info(f"Merged and normalized audio saved to {output_file}")
+            if save_to_file:
+                # Ensure output directory exists
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+                # Step 4: Export the combined audio file
+                combined.export(output_file, format=self.audio_format)
+                logger.info(f"Merged and normalized audio saved to {output_file}")
+
+            return (segments, combined)
 
         except Exception as e:
             logger.error(f"Error merging and normalizing audio files: {str(e)}")

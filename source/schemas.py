@@ -4,6 +4,7 @@ Pydantic models and data structures for TTS configuration and processing.
 
 from typing import Optional, Dict, Union
 from pydantic import BaseModel, Field
+from pydub import AudioSegment
 
 
 class SpeakerConfig(BaseModel):
@@ -160,6 +161,10 @@ class SpeakerSegment:
         voice_config (SpeakerConfig): The voice configuration for the speaker.
         audio (Optional[bytes]): Binary audio data if available.
         audio_file (Optional[str]): Path to an audio file if available.
+        audio_segment (Optional[AudioSegment]): An audio segment object if available.
+        audio_length (Optional[int]): The length of the audio in milliseconds, if available.
+        start_time (Optional[int]): The start time of the segment in milliseconds, if applicable.
+        end_time (Optional[int]): The end time of the segment in milliseconds, if applicable.
     """
 
     def __init__(
@@ -170,6 +175,10 @@ class SpeakerSegment:
         voice_config: Optional["SpeakerConfig"] = None,
         audio: Optional[bytes] = None,
         audio_file: Optional[str] = None,
+        audio_segment: Optional["AudioSegment"] = None,
+        audio_length: Optional[int] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
     ):
         self.speaker_id = speaker_id
         self.parameters = parameters or {}
@@ -177,10 +186,50 @@ class SpeakerSegment:
         self.voice_config = voice_config
         self.audio = audio
         self.audio_file = audio_file
+        self.audio_segment = audio_segment
+        self.audio_length = audio_length
+        self.start_time = start_time
+        self.end_time = end_time
 
     def __repr__(self):
         return (
             f"SpeakerSegment(speaker_id={self.speaker_id}, "
             f"parameters={self.parameters}, text={self.text}, "
-            f"voice_config={self.voice_config}, audio={self.audio}, audio_file={self.audio_file})"
+            f"voice_config={self.voice_config}, audio={self.audio}, "
+            f"audio_file={self.audio_file}, audio_segment={self.audio_segment}, "
+            f"audio_length={self.audio_length}, start_time={self.start_time}, "
+            f"end_time={self.end_time})"
         )
+
+    def to_tag(self) -> str:
+        """
+        Generates an XML-like tag for the SpeakerSegment instance.
+
+        Returns:
+            str: An XML-like representation of the SpeakerSegment.
+        """
+        # Build parameters part
+        parameters_str = " ".join(
+            f'{key}="{value}"' for key, value in self.parameters.items()
+        )
+
+        # Include optional properties if they are set
+        additional_properties = []
+        if self.audio_length is not None:
+            additional_properties.append(f'length="{self.audio_length}"')
+        if self.start_time is not None:
+            additional_properties.append(f'start="{self.start_time}"')
+        if self.end_time is not None:
+            additional_properties.append(f'end="{self.end_time}"')
+
+        # Combine all parts into the opening tag
+        attributes_str = " ".join(
+            filter(None, [parameters_str] + additional_properties)
+        )
+        opening_tag = f"<person{self.speaker_id} {attributes_str}>".strip()
+
+        # Closing tag
+        closing_tag = f"</person{self.speaker_id}>"
+
+        # Combine everything
+        return f"{opening_tag}{self.text}{closing_tag}"

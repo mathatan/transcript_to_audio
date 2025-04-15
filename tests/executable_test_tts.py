@@ -42,12 +42,12 @@ class ExecutableTestTTS:
 
         # Supported providers
         self.providers = [
-            # "elevenlabs",
+            "elevenlabs",
             # "azureopenai",
             # "openai",
             # "edge",
             # "geminimulti",
-            "gemini",
+            # "gemini",
         ]
 
     def run_tests(self):
@@ -69,9 +69,9 @@ class ExecutableTestTTS:
                     )
                     # provider_specific_config_args["model"] = "eleven_flash_v2_5"
                     provider_specific_config_args["use_emote"] = True
-                    provider_specific_config_args["emote_merge_pause"] = (
-                        600  # works better for FI
-                    )
+                    # provider_specific_config_args["emote_merge_pause"] = (
+                    #     600  # works better for FI
+                    # )
                 elif provider == "azureopenai":
                     provider_specific_config_args["api_key"] = os.getenv(
                         "AZURE_OPENAI_API_KEY"
@@ -181,7 +181,7 @@ class ExecutableTestTTS:
                 output_file = os.path.join(output_dir, f"{provider}_output.mp3")
 
                 # Convert text to speech
-                tts.convert_to_speech(self.transcript_text, output_file)
+                tts.convert_to_speech(self.transcript_text, output_file, True)
 
                 # Verify the file was created
                 if os.path.exists(output_file):

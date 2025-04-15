@@ -23,7 +23,7 @@ class TTSProvider(ABC):
         self.config = config
 
     @abstractmethod
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio for a list of SpeakerSegment objects using the provider's API.
 

@@ -8,11 +8,11 @@ from elevenlabs import (
     client as elevenlabs_client,
 )
 from elevenlabs.client import is_voice_id
-from ..base import SpeakerSegment, TTSProvider
+from ..base import TTSProvider
 from typing import List
-from ...schemas import TTSConfig
+from ...schemas import SpeakerSegment, TTSConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 class ElevenLabsTTS(TTSProvider):
@@ -32,11 +32,11 @@ class ElevenLabsTTS(TTSProvider):
         # Use the model from config or default to "eleven_multilingual_v2" if None
         self.model = config.model or "eleven_multilingual_v2"
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio using ElevenLabs API for all SpeakerSegments in a single call.
         """
-        audio_chunks = []
+        # audio_chunks = []
         # Initialize variables for history and request tracking
         previous_request_ids: List[tuple[str, str]] = []
         # previous_history_id: str | None = None
@@ -65,7 +65,8 @@ class ElevenLabsTTS(TTSProvider):
                     else segments[i - 1].text
                     + (
                         '" said. '
-                        if segments[i - 1].parameters.get("emote") is None
+                        if self.config.use_emote
+                        and segments[i - 1].parameters.get("emote") is None
                         else ('" ' + segments[i - 1].parameters.get("emote"))
                     )
                 )
@@ -78,7 +79,8 @@ class ElevenLabsTTS(TTSProvider):
                     if segments[i + 1].speaker_id == segment.speaker_id
                     else (
                         '" said. ' + segments[i + 1].text
-                        if segment.parameters.get("emote") is None
+                        if self.config.use_emote
+                        and segment.parameters.get("emote") is None
                         else (
                             segments[i + 1].text
                             + '" '
@@ -120,17 +122,24 @@ class ElevenLabsTTS(TTSProvider):
             )
 
             text = segment.text
-            if segment.parameters.get("emote", None) is not None:
-                text += '" <break time="2.0s" />' + segment.parameters.get("emote")
+            if (
+                self.config.use_emote
+                and self.config.emote_pause is not None
+                and segment.parameters.get("emote", None) is not None
+            ):
+                text += (
+                    f'<break time="{self.config.emote_pause}s" />" '
+                    + segment.parameters.get("emote")
+                )
 
-            audio = None
+            audio_chunks = None
             max_repeats = 3
             rep = 0
             gen_e = None
-            while rep < max_repeats and audio is None:
+            while rep < max_repeats and audio_chunks is None:
                 try:
-                    # Generate audio
-                    audio = self.client.text_to_speech.convert(
+                    # Generate audiochunks_
+                    audio_chunks = self.client.text_to_speech.convert(
                         enable_logging=True,
                         text=text,
                         voice_id=voice_id,
@@ -147,13 +156,13 @@ class ElevenLabsTTS(TTSProvider):
                     time.sleep(2)
                     rep += 1
 
-            if audio is None:
+            if audio_chunks is None:
                 raise ValueError(
-                    f"Unable to generate audio. \nError: {gen_e}"
+                    f"Unable to generate audio_chunks. \nError: {gen_e}"
                 ) from gen_e
 
             # Append audio chunks
-            audio_chunks.append(b"".join(chunk for chunk in audio if chunk))
+            segment.audio = b"".join(chunk for chunk in audio_chunks if chunk)
             prev_len = len(previous_request_ids)
             max_repeats = 3
             rep = 0
@@ -190,7 +199,7 @@ class ElevenLabsTTS(TTSProvider):
 
             # if history_response.history:
             #     previous_history_id = history_response.history[-1].history_item_id
-        return audio_chunks
+        return segments
 
     def get_supported_tags(self) -> List[str]:
         """Get supported SSML tags."""

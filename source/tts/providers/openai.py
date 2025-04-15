@@ -6,7 +6,7 @@ from typing import List
 from ..base import SpeakerSegment, TTSProvider
 from ...schemas import TTSConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 class OpenAITTS(TTSProvider):
@@ -56,11 +56,10 @@ class OpenAITTS(TTSProvider):
         """Get all supported SSML tags including provider-specific ones."""
         return self.PROVIDER_SSML_TAGS
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio using OpenAI API for all SpeakerSegments in a single call.
         """
-        audio_chunks = []
         for segment in segments:
             logger.info(
                 f"Generating audio for Speaker {segment.speaker_id}: {segment.text}"
@@ -78,14 +77,14 @@ class OpenAITTS(TTSProvider):
 
                 if self.streaming:
                     logger.info("Streaming audio in real-time...")
-                    audio_chunks.append(b"".join(chunk for chunk in response))
+                    segment.audio = b"".join(chunk for chunk in response)
                 else:
                     logger.info("Saving audio to memory...")
-                    audio_chunks.append(response.content)
+                    segment.audio = response.content
 
             except Exception as e:
                 logger.error(
                     f"Failed to generate audio for Speaker {segment.speaker_id}: {str(e)}"
                 )
                 raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
-        return audio_chunks
+        return segments

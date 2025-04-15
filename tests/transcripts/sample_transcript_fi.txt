@@ -1,0 +1,11 @@
+<person1 emote="Hän puhui innostuneesti ja iloisella äänellä">Hei, miten voit tänään?  </person1>
+<person2 emote="Hän vastasi lämpimästi ja kutsuvasti">Voin hyvin, kiitos! Entä sinä?</person2>
+<person1 emote="Hän sanoi iloisesti ja energisesti">Voin loistavasti, kiitos kysymästä.</person1>
+<person1 emote="Hän kysyi uteliaasti nousevalla äänellä">Onko sinulla suunnitelmia viikonlopuksi?</person1>
+<person2 emote="Hän vastasi mietteliäästi rauhallisella äänellä">En ole vielä varma, saatan vain jäädä kotiin lukemaan. Entä sinä?</person2>
+<person1 emote="Hän ehdotti innostuneesti ja kiihtyneesti">Ajattelin mennä vaeltamaan! Sään pitäisi olla täydellinen.</person1>
+<person2 emote="Hän vastasi kiinnostuneena ja uteliaana">Oi, se on ihana ajatus! Rakastan ulkoilua.</person2>
+<person1 emote="Hän sanoi leikkisästi kiusoittelevalla äänellä">Sinun pitäisi tulla mukaan, jos olet vapaa.</person1>
+<person2 emote="Hän vastasi haastavasti rohkealla äänellä">Oletko varma, että pysyt perässäni polulla?</person2>
+<person1 emote="Hän kiusoitteli itsevarmasti leikkisällä äänellä">Oi, olen varma! Mutta annan sinun voittaa, jos lupaat tuoda eväitä.</person1>
+<person2 emote="Hän suostui iloisesti ja innostuneesti">Sovittu! Tuollaiselle vaellukselle lähden ehdottomasti mukaan.</person2>

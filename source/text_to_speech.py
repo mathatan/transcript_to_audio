@@ -11,14 +11,21 @@ import math
 import os
 import tempfile
 from typing import List, Tuple, Optional, Dict, Any, Union
+import uuid
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
+from source.tts.providers.geminimulti import GeminiMultiTTS
+
 from .tts.base import TTSProvider
 from .tts.factory import TTSProviderFactory
-from .schemas import SpeakerConfig, TTSConfig  # Import from the new schemas file
+from .schemas import (
+    SpeakerSegment,
+    SpeakerConfig,
+    TTSConfig,
+)  # Import from the new schemas file
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 # Default speaker configurations using the Pydantic model
@@ -138,26 +145,40 @@ class TextToSpeech:
             logger.error(f"Error converting text to speech: {str(e)}")
             raise
 
-    def _generate_audio_segments(self, text: str, temp_dir: str) -> List[str]:
+    def _generate_audio_segments(
+        self, text: str, temp_dir: str
+    ) -> Tuple[List[SpeakerSegment], Union[str | None]]:
         """Generate audio segments for each Q&A pair."""
         # Parse the input text into SpeakerSegment instances
         segments = self.provider.split_qa(text, self.provider.get_supported_tags())
 
-        audio_files = []
+        # audio_files = []
+        audio_file = None
 
-        # Generate audio for all segments in a single call
-        audio_data_list = self.provider.generate_audio(segments)
+        if not isinstance(self.provider, GeminiMultiTTS):
+            generated_id = str(uuid.uuid4())
+            # Generate audio for all segments in a single call
+            segments = self.provider.generate_audio(segments)
 
-        # Save each audio chunk to a temporary file
-        for idx, (segment, audio_data) in enumerate(zip(segments, audio_data_list), 1):
-            temp_file = os.path.join(
-                temp_dir, f"{idx}_speaker{segment.speaker_id}.{self.audio_format}"
+            # Save each audio chunk to a temporary file
+            for idx, segment in enumerate(segments):
+                if segment.audio:
+                    temp_file = os.path.join(
+                        temp_dir,
+                        f"{generated_id}_{idx}_speaker{segment.speaker_id}.{self.audio_format}",
+                    )
+                    with open(temp_file, "wb") as f:
+                        f.write(segment.audio)
+                    segment.audio_file = temp_file
+        else:
+            audio = self.provider.generate_joint_audio(segments)
+            generated_id = str(uuid.uuid4())
+            audio_file = os.path.join(
+                temp_dir, f"{generated_id}_full_audio.{self.audio_format}"
             )
-            with open(temp_file, "wb") as f:
-                f.write(audio_data)
-            audio_files.append(temp_file)
-
-        return audio_files
+            with open(audio_file, "wb") as f:
+                f.write(audio)
+        return [segments, audio_file]
 
     @classmethod
     def _normalize_audio_segments(
@@ -187,8 +208,9 @@ class TextToSpeech:
 
         return normalized_segments
 
-    @classmethod
-    def _split_audio_on_silence(cls, audio: AudioSegment) -> List[AudioSegment]:
+    def _split_audio_on_silence(
+        self, audio: AudioSegment, speaker_segment: SpeakerSegment
+    ) -> AudioSegment:
         """
         Split the given audio into chunks based on silence detection.
 
@@ -198,58 +220,66 @@ class TextToSpeech:
         Returns:
             A list of audio chunks split based on silence
         """
-        silence_threshold = -40  # Silence threshold in dB
-        min_silence_len = 2000  # Minimum silence duration (2 seconds)
-
-        try:
-            chunks = split_on_silence(  # Using split_on_silence from pydub.silence
-                audio,
-                min_silence_len=min_silence_len,
-                silence_thresh=silence_threshold,
-                keep_silence=500,
+        if (
+            self.tts_config.use_emote
+            and speaker_segment.parameters.get("emote") is not None
+        ):
+            silence_threshold = -40  # Silence threshold in dB
+            min_silence_len = (
+                int(round(float(self.tts_config.emote_pause) * 1000)) or 2000
             )
 
-            logger.info(
-                f"Detected {len(chunks)} chunks in the audio after silence detection."
-            )
-            return chunks[0] if len(chunks) > 1 else audio
-        except Exception as e:
-            logger.error(f"Error during silence detection: {str(e)}")
-            raise
+            try:
+                chunks = split_on_silence(  # Using split_on_silence from pydub.silence
+                    audio,
+                    min_silence_len=min_silence_len,
+                    silence_thresh=silence_threshold,
+                    keep_silence=self.tts_config.emote_merge_pause or 500,
+                )
 
-    def _merge_audio_files(self, audio_files: List[str], output_file: str) -> None:
+                logger.info(
+                    f"Detected {len(chunks)} chunks in the audio after silence detection."
+                )
+                if len(chunks) > 1:
+                    # Drop the last chunk and concatenate the remaining ones
+                    merged_audio = sum(chunks[:-1])
+                    return merged_audio
+                return audio  # Return the original audio if only one chunk
+            except Exception as e:
+                logger.error(f"Error during silence detection: {str(e)}")
+                raise
+        else:
+            return audio
+
+    def _merge_audio_files(
+        self,
+        audio_files: tuple[List[SpeakerSegment], Union[str | None]],
+        output_file: str,
+    ) -> None:
         """
         Merge the provided audio files sequentially, ensuring questions come before answers,
         and normalize the audio segments to a consistent loudness level.
 
         Args:
-            audio_files: List of paths to audio files to merge
+            audio_files: Tuple of list of speaker segments with files to merge and audio file (if GeminiMultiSpeaker)
             output_file: Path to save the merged audio file
         """
+
         try:
-
-            def get_sort_key(file_path: str) -> Tuple[int, int]:
-                """
-                Create sort key from filename that orders files by index and speaker ID.
-                Example filenames: "1_speaker1.mp3", "2_speaker2.mp3"
-                """
-                basename = os.path.basename(file_path)
-                idx = int(basename.split("_")[0])
-                speaker_id = int(
-                    basename.split("_")[1].replace("speaker", "").split(".")[0]
-                )
-                return (idx, speaker_id)
-
-            # Sort files by index and type (question/answer)
-            audio_files.sort(key=get_sort_key)
-
-            # Step 1: Load all audio segments
-            audio_segments = [
-                self._split_audio_on_silence(
-                    AudioSegment.from_file(file_path, format=self.audio_format)
-                )
-                for file_path in audio_files
-            ]
+            if audio_files[1] is not None:
+                audio_segments = [
+                    AudioSegment.from_file(audio_files[1], format=self.audio_format)
+                ]
+            else:
+                audio_segments = [
+                    self._split_audio_on_silence(
+                        AudioSegment.from_file(
+                            segment.audio_file, format=self.audio_format
+                        ),
+                        segment,
+                    )
+                    for segment in audio_files[0]
+                ]
 
             # Step 2: Normalize all audio segments
             normalized_segments = self._normalize_audio_segments(audio_segments)

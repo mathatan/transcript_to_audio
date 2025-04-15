@@ -1,0 +1,11 @@
+<person1 emote="Han talade med spänning och en glad ton">Hej, hur mår du idag?  </person1>
+<person2 emote="Hon svarade varmt och inbjudande">Jag mår bra, tack! Hur är det själv?</person2>
+<person1 emote="Han sa glatt och med energi">Jag mår toppen, tack för att du frågar.</person1>
+<person1 emote="Han frågade nyfiket med stigande ton">Har du några planer för helgen?</person1>
+<person2 emote="Hon svarade eftertänksamt med lugn ton">Inte säker än, jag kanske bara stannar inne och läser. Och du då?</person2>
+<person1 emote="Han föreslog entusiastiskt med spänning">Jag funderade på att vandra! Vädret borde vara perfekt.</person1>
+<person2 emote="Hon svarade med intriger och intresse">Åh, det är en härlig idé! Jag älskar verkligen att vara utomhus.</person2>
+<person1 emote="Han sa lekfullt med en retsam ton">Du borde följa med om du är ledig.</person1>
+<person2 emote="Hon svarade utmanande med en djärv ton">Är du säker på att du kan hänga med mig på en stig?</person2>
+<person1 emote="Han retades självsäkert med en lekfull ton">Åh, jag är säker! Men jag låter dig vinna om du lovar att ta med snacks.</person1>
+<person2 emote="Hon höll med glatt och med entusiasm">Deal! Det är en vandring jag definitivt kan ställa mig bakom.</person2>

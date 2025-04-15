@@ -6,7 +6,7 @@ from typing import List
 from ..base import SpeakerSegment, TTSProvider
 from ...schemas import TTSConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 class AzureOpenAITTS(TTSProvider):
@@ -40,25 +40,24 @@ class AzureOpenAITTS(TTSProvider):
         """Get supported SSML tags."""
         return self.COMMON_SSML_TAGS
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio using Azure OpenAI TTS API for all SpeakerSegments in a single call.
         """
-        audio_chunks = []
         for segment in segments:
             logger.info(
                 f"Generating audio for Speaker {segment.speaker_id}: {segment.text}"
             )
             try:
                 response = self.client.audio.speech.create(
-                    model="gpt-4o-audio-preview",
+                    model=self.config.model or "gpt-4o-audio-preview",
                     voice=segment.voice_config.voice or "alloy",
                     input=segment.text,
                 )
-                audio_chunks.append(response.content)
+                segment.audio = response.content
             except Exception as e:
                 logger.error(
                     f"Failed to generate audio for Speaker {segment.speaker_id}: {str(e)}"
                 )
                 raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
-        return audio_chunks
+        return segments

@@ -1,0 +1,11 @@
+<person1 emote="He spoke with excitement and a cheerful tone">Hello, how are you today?  </person1>
+<person2 emote="She replied warmly and invitingly">I'm doing well, thank you! How about you?</person2>
+<person1 emote="He said happily and with energy">I'm great, thanks for asking.</person1>
+<person1 emote="He asked curiously with a rising tone">Do you have any plans for the weekend?</person1>
+<person2 emote="She answered thoughtfully with a calm tone">Not sure yet, I might just stay in and read. What about you?</person2>
+<person1 emote="He suggested enthusiastically with excitement">I was thinking of hiking! The weather should be perfect.</person1>
+<person2 emote="She responded with intrigue and interest">Oh, that's a lovely idea! I do love the outdoors.</person2>
+<person1 emote="He said playfully with a teasing tone">You should come along if you're free.</person1>
+<person2 emote="She replied challengingly with a bold tone">Are you sure you can keep up with me on a trail?</person2>
+<person1 emote="He teased confidently with a playful tone">Oh, I'm sure! But I'll let you win if you promise to bring snacks.</person1>
+<person2 emote="She agreed cheerfully with enthusiasm">Deal! Now that's a hike I can definitely get behind.</person2>

@@ -48,6 +48,7 @@ class SpeakerConfig(BaseModel):
     use_speaker_boost: Optional[bool] = Field(
         default=True, description="Whether to use speaker boost (ElevenLabs-specific)."
     )
+
     ssml_gender: Optional[str] = Field(
         default="NEUTRAL",
         description="Gender identifier for SSML-driven TTS (Gemini-specific).",
@@ -131,6 +132,18 @@ class TTSConfig(BaseModel):
         default="en",
         description="The language for the TTS request (OpenAI-specific, distinct from SpeakerConfig language).",
     )
+    use_emote: Optional[bool] = Field(
+        default=True,
+        description="Whether to use emotes with audio generation (ElevenLabs-specific).",
+    )
+    emote_pause: Optional[str] = Field(
+        default="1.5",
+        description="Length to use for splitting emote description from text (ElevenLabs-specific).",
+    )
+    emote_merge_pause: Optional[int] = Field(
+        default=500,
+        description="Pause between speaker turns when using emote (ElevenLabs-specific).",
+    )
 
     class Config:
         extra = "allow"  # Allow extra fields for specific providers or future use.
@@ -144,23 +157,30 @@ class SpeakerSegment:
         speaker_id (int): The ID of the speaker (e.g., 1 for <person1>).
         parameters (dict): Additional parameters extracted from the tag (e.g., {"param": "value"}).
         text (str): The text content of the segment.
-        voice_config (dict): The voice configuration for the speaker.
+        voice_config (SpeakerConfig): The voice configuration for the speaker.
+        audio (Optional[bytes]): Binary audio data if available.
+        audio_file (Optional[str]): Path to an audio file if available.
     """
 
     def __init__(
         self,
         speaker_id: int,
-        parameters: Dict[str, str],
-        text: str,
-        voice_config: SpeakerConfig,
+        parameters: Optional[Dict[str, str]] = None,
+        text: str = "",
+        voice_config: Optional["SpeakerConfig"] = None,
+        audio: Optional[bytes] = None,
+        audio_file: Optional[str] = None,
     ):
         self.speaker_id = speaker_id
-        self.parameters = parameters
+        self.parameters = parameters or {}
         self.text = text
         self.voice_config = voice_config
+        self.audio = audio
+        self.audio_file = audio_file
 
     def __repr__(self):
         return (
             f"SpeakerSegment(speaker_id={self.speaker_id}, "
-            f"parameters={self.parameters}, text={self.text}, voice_config={self.voice_config})"
+            f"parameters={self.parameters}, text={self.text}, "
+            f"voice_config={self.voice_config}, audio={self.audio}, audio_file={self.audio_file})"
         )

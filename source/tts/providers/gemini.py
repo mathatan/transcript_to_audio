@@ -6,7 +6,7 @@ from ..base import SpeakerSegment, TTSProvider
 from ...schemas import TTSConfig
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 class GeminiTTS(TTSProvider):
@@ -31,11 +31,10 @@ class GeminiTTS(TTSProvider):
             logger.error(f"Failed to initialize Google TTS client: {str(e)}")
             raise
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio using Google Cloud TTS API for all SpeakerSegments in a single call.
         """
-        audio_chunks = []
         for segment in segments:
             logger.info(
                 f"Generating audio for Speaker {segment.speaker_id}: {segment.text}"
@@ -74,7 +73,7 @@ class GeminiTTS(TTSProvider):
                     }
                 )
 
-                audio_chunks.append(response.audio_content)
+                segment.audio = response.audio_content
 
             except Exception as e:
                 logger.error(
@@ -82,7 +81,7 @@ class GeminiTTS(TTSProvider):
                 )
                 raise RuntimeError(f"Failed to generate audio: {str(e)}") from e
 
-        return audio_chunks
+        return segments
 
     def get_supported_tags(self) -> List[str]:
         """Get supported SSML tags."""

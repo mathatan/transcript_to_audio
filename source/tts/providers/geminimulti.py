@@ -11,7 +11,7 @@ import logging
 from io import BytesIO
 from pydub import AudioSegment
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("transcript_to_audio_logger")
 
 
 class GeminiMultiTTS(TTSProvider):
@@ -239,13 +239,12 @@ class GeminiMultiTTS(TTSProvider):
                             f"Could not remove temp file {temp_file_path} during final cleanup: {e}"
                         )
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_joint_audio(self, segments: List[SpeakerSegment]) -> bytes:
         """
         Generate audio using Google Cloud TTS API with multi-speaker support.
         Handles all SpeakerSegment instances in a single call.
         """
         logger.info(f"Starting audio generation for {len(segments)} segments")
-        audio_chunks = []
 
         try:
             # Create multi-speaker markup
@@ -280,12 +279,10 @@ class GeminiMultiTTS(TTSProvider):
                 input=synthesis_input, voice=voice_params, audio_config=audio_config
             )
 
-            audio_chunks.append(response.audio_content)
-
-            return audio_chunks
+            return response.audio_content
 
         except Exception as e:
-            logger.error(f"Failed to generate audio: {str(e)}", exc_info=True)
+            # logger.error(f"Failed to generate audio: {str(e)}", exc_info=True)
             raise RuntimeError(f"Failed to generate audio: {str(e)}")  # from e
 
     def get_supported_tags(self) -> List[str]:

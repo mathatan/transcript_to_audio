@@ -20,7 +20,7 @@ class EdgeTTS(TTSProvider):
         # Use the model from config or default to "default" if None
         self.model = config.model or "default"
 
-    def generate_audio(self, segments: List[SpeakerSegment]) -> List[bytes]:
+    def generate_audio(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """
         Generate audio using Edge TTS for all SpeakerSegments in a single call.
         """
@@ -43,11 +43,12 @@ class EdgeTTS(TTSProvider):
                 await communicate.save(temp_path)
                 # Read the audio data
                 with open(temp_path, "rb") as f:
-                    return f.read()
+                    segment.audio = f.read()
             finally:
                 # Clean up temporary file
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
+                return segment
 
         # Use asyncio to process all segments
         loop = asyncio.get_event_loop()

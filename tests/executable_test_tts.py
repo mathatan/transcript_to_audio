@@ -6,78 +6,71 @@ from dotenv import load_dotenv
 from source.text_to_speech import TextToSpeech
 from source.schemas import TTSConfig, SpeakerConfig
 
+import logging
+
+logger = logging.getLogger("transcript_to_audio_logger")
+logger.setLevel(logging.DEBUG)
+
+# Create a StreamHandler to output logs to the shell
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.DEBUG)  # Handler level
+
+# Optional: Add a formatter for better readability
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+stream_handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(stream_handler)
+
 
 class ExecutableTestTTS:
-    def __init__(self):
+    def __init__(
+        self, transcript_filename="tests/transcripts/sample_transcript_en.txt"
+    ):
         # Load environment variables from .env file
         load_dotenv()
 
+        # transcript_filename = "tests/transcripts/article_transcript_fi.txt"
+
+        # Load transcript from file
+        try:
+            with open(transcript_filename, "r", encoding="utf-8") as f:
+                self.transcript_text = f.read()
+        except FileNotFoundError:
+            logger.debug(f"Error: Transcript file not found at {transcript_filename}")
+            self.transcript_text = ""  # Set to empty string or handle error as needed
+
         # Supported providers
         self.providers = [
-            "elevenlabs",
+            # "elevenlabs",
             # "azureopenai",
             # "openai",
             # "edge",
             # "geminimulti",
-            # "gemini",
+            "gemini",
         ]
-
-        # Sample transcript-style text for testing
-        # self.sample_text = (
-        #     "<person1>Hello, how are you today?</person1> "
-        #     "<person2>I'm doing well, thank you! How about you?</person2> "
-        #     "<person1>I'm great, thanks for asking.</person1>"
-        # )
-        self.sample_text = (
-            "<person1>Hello, how are you today?  </person1>"
-            "<person2>I'm doing well, thank you! How about you?</person2>"
-            "<person1>I'm great, thanks for asking.</person1>"
-            "<person1>Do you have any plans for the weekend?</person1>"
-            "<person2>Not sure yet, I might just stay in and read. What about you?</person2>"
-            "<person1>I was thinking of hiking! The weather should be perfect.</person1>"
-            "<person2>Oh, that's a lovely idea! I do love the outdoors.</person2>"
-            "<person1>You should come along if you're free.</person1>"
-            "<person2>Are you sure you can keep up with me on a trail?</person2>"
-            "<person1>Oh, I'm sure! But I'll let you win if you promise to bring snacks.</person1>"
-            "<person2>Deal! Now that's a hike I can definitely get behind.</person2>"
-        )
-
-        # self.sample_text_with_emoting = (
-        #     '<person1 emote="Started enthusiasticly">Hello, how are you today?  </person1>'
-        #     '<person2 emote="Replied a bit sarcastically">I\'m doing well, thank you! How about you?</person2>'
-        #     '<person1 emote="Said with a smile in his voice">I\'m great, thanks for asking.</person1>'
-        # )
-
-        self.sample_text_with_emoting = (
-            '<person1 emote="He spoke with excitement and a cheerful tone">Hello, how are you today?  </person1>'
-            '<person2 emote="She replied warmly and invitingly">I\'m doing well, thank you! How about you?</person2>'
-            '<person1 emote="He said happily and with energy">I\'m great, thanks for asking.</person1>'
-            '<person1 emote="He asked curiously with a rising tone">Do you have any plans for the weekend?</person1>'
-            '<person2 emote="She answered thoughtfully with a calm tone">Not sure yet, I might just stay in and read. What about you?</person2>'
-            '<person1 emote="He suggested enthusiastically with excitement">I was thinking of hiking! The weather should be perfect.</person1>'
-            '<person2 emote="She responded with intrigue and interest">Oh, that\'s a lovely idea! I do love the outdoors.</person2>'
-            '<person1 emote="He said playfully with a teasing tone">You should come along if you\'re free.</person1>'
-            '<person2 emote="She replied challengingly with a bold tone">Are you sure you can keep up with me on a trail?</person2>'
-            "<person1 emote=\"He teased confidently with a playful tone\">Oh, I'm sure! But I'll let you win if you promise to bring snacks.</person1>"
-            '<person2 emote="She agreed cheerfully with enthusiasm">Deal! Now that\'s a hike I can definitely get behind.</person2>'
-        )
 
     def run_tests(self):
         # Define the output directory relative to the project root
         output_dir = "data/audio"
         # Ensure the output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        print(f"Saving test outputs to: {os.path.abspath(output_dir)}")
+        logger.debug(f"Saving test outputs to: {os.path.abspath(output_dir)}")
 
         for provider in self.providers:
             try:
-                print(f"Testing provider: {provider}")
+                logger.debug(f"Testing provider: {provider}")
 
                 # Load provider-specific environment variables
                 provider_specific_config_args = {}
                 if provider == "elevenlabs":
                     provider_specific_config_args["api_key"] = os.getenv(
                         "ELEVENLABS_API_KEY"
+                    )
+                    # provider_specific_config_args["model"] = "eleven_flash_v2_5"
+                    provider_specific_config_args["use_emote"] = True
+                    provider_specific_config_args["emote_merge_pause"] = (
+                        600  # works better for FI
                     )
                 elif provider == "azureopenai":
                     provider_specific_config_args["api_key"] = os.getenv(
@@ -104,7 +97,7 @@ class ExecutableTestTTS:
                     "api_key" in provider_specific_config_args
                     and not provider_specific_config_args["api_key"]
                 ):
-                    print(f"Skipping test for {provider}: Missing API key")
+                    logger.debug(f"Skipping test for {provider}: Missing API key")
                     continue
 
                 # Define provider-specific speaker configurations
@@ -113,18 +106,33 @@ class ExecutableTestTTS:
 
                 if provider == "elevenlabs":
                     # Example voice IDs, replace with actual IDs if needed
+                    # English
                     speaker1_config = SpeakerConfig(
                         voice="Liam",
                         language="en-US",
-                        # stability=0.15,
-                        # similarity_boost=0.4,
+                        stability=0.25,
+                        similarity_boost=0.5,
                     )
                     speaker2_config = SpeakerConfig(
                         voice="Juniper",
                         language="en-US",
-                        # stability=0.15,
-                        # similarity_boost=0.4,
+                        stability=0.25,
+                        similarity_boost=0.5,
                     )
+
+                    # Finnish
+                    # speaker1_config = SpeakerConfig(
+                    #     voice="Chris",
+                    #     language="fi-FI",
+                    #     stability=0.5,
+                    #     similarity_boost=0.5,
+                    # )
+                    # speaker2_config = SpeakerConfig(
+                    #     voice="tDgDlJWDwRpTqPofl3HU",
+                    #     language="fi-FI",
+                    #     stability=0.2,
+                    #     similarity_boost=0.5,
+                    # )
                 elif provider == "azureopenai":
                     speaker1_config = SpeakerConfig(voice="alloy", language="en-US")
                     speaker2_config = SpeakerConfig(voice="nova", language="en-US")
@@ -164,6 +172,8 @@ class ExecutableTestTTS:
                     **provider_specific_config_args,
                 )
 
+                logger.debug(f"{provider=} {test_tts_config=}")
+
                 # Initialize TextToSpeech with the current provider and config
                 tts = TextToSpeech(provider=provider, tts_config=test_tts_config)
 
@@ -171,23 +181,18 @@ class ExecutableTestTTS:
                 output_file = os.path.join(output_dir, f"{provider}_output.mp3")
 
                 # Convert text to speech
-                tts.convert_to_speech(
-                    (
-                        self.sample_text
-                        if provider != "elevenlabs"
-                        else self.sample_text_with_emoting
-                    ),
-                    output_file,
-                )
+                tts.convert_to_speech(self.transcript_text, output_file)
 
                 # Verify the file was created
                 if os.path.exists(output_file):
-                    print(f"Success: MP3 file created for {provider} at {output_file}")
+                    logger.debug(
+                        f"Success: MP3 file created for {provider} at {output_file}"
+                    )
                 else:
-                    print(f"Error: MP3 file not created for {provider}")
+                    logger.debug(f"Error: MP3 file not created for {provider}")
 
             except Exception as e:
-                print(f"Error testing provider {provider}: {e}")
+                logger.debug(f"Error testing provider {provider}: {e}")
 
 
 if __name__ == "__main__":

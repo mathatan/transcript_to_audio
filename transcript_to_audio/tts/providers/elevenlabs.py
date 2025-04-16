@@ -65,9 +65,9 @@ class ElevenLabsTTS(TTSProvider):
                     else segments[i - 1].text
                     + (
                         '" said. '
-                        if self.config.use_emote
+                        if segments[i - 1].voice_config.use_emote
                         and segments[i - 1].parameters.get("emote") is None
-                        else ('" ' + segments[i - 1].parameters.get("emote"))
+                        else ('" ' + segments[i - 1].parameters.get("emote", "said"))
                     )
                 )
                 if i > 0
@@ -79,12 +79,12 @@ class ElevenLabsTTS(TTSProvider):
                     if segments[i + 1].speaker_id == segment.speaker_id
                     else (
                         '" said. ' + segments[i + 1].text
-                        if self.config.use_emote
+                        if segment.voice_config.use_emote
                         and segment.parameters.get("emote") is None
                         else (
                             segments[i + 1].text
                             + '" '
-                            + segment.parameters.get("emote")
+                            + segment.parameters.get("emote", "said")
                         )
                     )
                 )
@@ -123,12 +123,12 @@ class ElevenLabsTTS(TTSProvider):
 
             text = segment.text
             if (
-                self.config.use_emote
-                and self.config.emote_pause is not None
+                segment.voice_config.use_emote
+                and segment.voice_config.emote_pause is not None
                 and segment.parameters.get("emote", None) is not None
             ):
                 text += (
-                    f'<break time="{self.config.emote_pause}s" />" '
+                    f'<break time="{segment.voice_config.emote_pause}s" />" '
                     + segment.parameters.get("emote")
                 )
 

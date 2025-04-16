@@ -21,6 +21,9 @@ class SpeakerConfig(BaseModel):
         similarity_boost (Optional[float]): Similarity boost in speech tone (ElevenLabs-specific). Defaults to 0.85.
         style (Optional[int]): Style of speech delivery (ElevenLabs-specific). Defaults to 0.
         ssml_gender (Optional[str]): Gender identifier for SSML-driven TTS (Gemini-specific). Defaults to "NEUTRAL".
+        use_emote (Optional[bool]): Whether to include emotes in audio generation (ElevenLabs-specific). Defaults to True.
+        emote_pause (Optional[str]): Duration (in seconds) to split emote descriptions from text (ElevenLabs-specific). Defaults to '1.5'.
+        emote_merge_pause (Optional[int]): Pause duration (in milliseconds) between speaker turns when using emotes (ElevenLabs-specific). Defaults to 500.
     """
 
     voice: str = Field(
@@ -55,84 +58,6 @@ class SpeakerConfig(BaseModel):
         description="Gender identifier for SSML-driven TTS (Gemini-specific).",
     )
 
-    class Config:
-        extra = "allow"  # Allow extra fields for specific providers.
-
-
-class TTSConfig(BaseModel):
-    """
-    Configuration for the Text-to-Speech system and providers.
-
-    Attributes:
-        speaker_configs (Dict[int, SpeakerConfig]): Configurations for each speaker ID. Defaults to an empty dict.
-        audio_format (str): The desired output audio format (e.g., 'mp3', 'wav'). Defaults to 'mp3'.
-        output_directories (Dict[str, str]): Dictionary mapping output types (e.g., 'audio', 'transcripts') to directory paths. Defaults to an empty dict.
-        temp_audio_dir (str): Path to the directory for temporary audio files. Defaults to 'data/audio/tmp/'.
-        api_base (Optional[str]): The base URL for the API endpoint (Azure OpenAI-specific). Defaults to None.
-        api_key (Optional[str]): API key for the TTS provider (Used by Azure, ElevenLabs, Gemini, OpenAI). Defaults to None. Can often be set via environment variables.
-        api_version (str): API version for the TTS provider (Azure OpenAI-specific). Defaults to '2025-01-01-preview'.
-        deployment (Optional[str]): Deployment name or ID for the TTS provider (Azure OpenAI-specific). Defaults to None.
-        model (Optional[str]): The specific TTS model to use. Defaults vary by provider (Edge, ElevenLabs, Gemini, OpenAI). Defaults to None.
-        response_format (str): The audio format for the API response (OpenAI-specific). Defaults to 'mp3'.
-        streaming (bool): Whether to use streaming audio generation (OpenAI-specific). Defaults to False.
-        speed (float): The speaking speed multiplier (OpenAI-specific). Defaults to 1.0.
-        language (str): The language for the TTS request (OpenAI-specific, distinct from SpeakerConfig language). Defaults to 'en'.
-    """
-
-    speaker_configs: Dict[int, SpeakerConfig] = Field(
-        default_factory=dict,
-        description="Configurations for each speaker ID.",
-    )
-    audio_format: str = Field(
-        default="mp3",
-        description="The desired output audio format (e.g., 'mp3', 'wav').",
-    )
-    output_directories: Dict[str, str] = Field(
-        default_factory=lambda: {
-            "audio": "data/audio/",
-            "transcripts": "data/transcripts/",
-        },
-        description="Dictionary mapping output types (e.g., 'audio', 'transcripts') to directory paths.",
-    )
-    temp_audio_dir: str = Field(
-        default="data/audio/tmp/",
-        description="Path to the directory for temporary audio files.",
-    )
-    api_base: Optional[str] = Field(
-        default=None,
-        description="The base URL for the API endpoint (Azure OpenAI-specific).",
-    )
-    api_key: Optional[str] = Field(
-        default=None,
-        description="API key for the TTS provider (Used by Azure, ElevenLabs, Gemini, OpenAI). Can often be set via environment variables.",
-    )
-    api_version: str = Field(
-        default="2025-01-01-preview",
-        description="API version for the TTS provider (Azure OpenAI-specific).",
-    )
-    deployment: Optional[str] = Field(
-        default=None,
-        description="Deployment name or ID for the TTS provider (Azure OpenAI-specific).",
-    )
-    model: Optional[str] = Field(
-        default=None,
-        description="The specific TTS model to use. Defaults vary by provider (Edge, ElevenLabs, Gemini, OpenAI).",
-    )
-    response_format: str = Field(
-        default="mp3",
-        description="The audio format for the API response (OpenAI-specific).",
-    )
-    streaming: bool = Field(
-        default=False,
-        description="Whether to use streaming audio generation (OpenAI-specific).",
-    )
-    speed: float = Field(
-        default=1.0, description="The speaking speed multiplier (OpenAI-specific)."
-    )
-    language: str = Field(
-        default="en",
-        description="The language for the TTS request (OpenAI-specific, distinct from SpeakerConfig language).",
-    )
     use_emote: Optional[bool] = Field(
         default=True,
         description="Whether to use emotes with audio generation (ElevenLabs-specific).",
@@ -144,6 +69,75 @@ class TTSConfig(BaseModel):
     emote_merge_pause: Optional[int] = Field(
         default=500,
         description="Pause between speaker turns when using emote (ElevenLabs-specific).",
+    )
+
+    class Config:
+        extra = "allow"  # Allow extra fields for specific providers.
+
+
+class TTSConfig(BaseModel):
+    """
+    Configuration for the Text-to-Speech system and providers.
+
+    Attributes:
+        audio_format (Optional[str]): The desired output audio format (e.g., 'mp3', 'wav'). Defaults to 'mp3'.
+        output_directories (Optional[Dict[str, str]]): Dictionary mapping output types (e.g., 'audio', 'transcripts') to directory paths. Defaults to {'audio': 'data/audio/', 'transcripts': 'data/transcripts/'}.
+        temp_audio_dir (Optional[str]): Path to the directory for temporary audio files. Defaults to 'data/audio/tmp/'.
+        api_base (Optional[str]): The base URL for the API endpoint (Azure OpenAI-specific). Defaults to None.
+        api_key (Optional[str]): API key for the TTS provider (Used by Azure, ElevenLabs, Gemini, OpenAI). Defaults to None. Can often be set via environment variables.
+        api_version (Optional[str]): API version for the TTS provider (Azure OpenAI-specific). Defaults to '2025-01-01-preview'.
+        deployment (Optional[str]): Deployment name or ID for the TTS provider (Azure OpenAI-specific). Defaults to None.
+        model (Optional[str]): The specific TTS model to use. Defaults vary by provider (Edge, ElevenLabs, Gemini, OpenAI). Defaults to None.
+        streaming (Optional[bool]): Whether to use streaming audio generation (OpenAI-specific). Defaults to False.
+        speed (Optional[float]): The speaking speed multiplier (OpenAI-specific). Defaults to 1.0.
+        language (Optional[str]): The language for the TTS request (OpenAI-specific, distinct from SpeakerConfig language). Defaults to 'en'.
+    """
+
+    audio_format: Optional[str] = Field(
+        default="mp3",
+        description="The desired output audio format (e.g., 'mp3', 'wav').",
+    )
+    output_directories: Optional[Dict[str, str]] = Field(
+        default_factory=lambda: {
+            "audio": "data/audio/",
+            "transcripts": "data/transcripts/",
+        },
+        description="Dictionary mapping output types (e.g., 'audio', 'transcripts') to directory paths.",
+    )
+    temp_audio_dir: Optional[str] = Field(
+        default="data/audio/tmp/",
+        description="Path to the directory for temporary audio files.",
+    )
+    api_base: Optional[str] = Field(
+        default=None,
+        description="The base URL for the API endpoint (Azure OpenAI-specific).",
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="API key for the TTS provider (Used by Azure, ElevenLabs, Gemini, OpenAI). Can often be set via environment variables.",
+    )
+    api_version: Optional[str] = Field(
+        default="2025-01-01-preview",
+        description="API version for the TTS provider (Azure OpenAI-specific).",
+    )
+    deployment: Optional[str] = Field(
+        default=None,
+        description="Deployment name or ID for the TTS provider (Azure OpenAI-specific).",
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="The specific TTS model to use. Defaults vary by provider (Edge, ElevenLabs, Gemini, OpenAI).",
+    )
+    streaming: Optional[bool] = Field(
+        default=False,
+        description="Whether to use streaming audio generation (OpenAI-specific).",
+    )
+    speed: Optional[float] = Field(
+        default=1.0, description="The speaking speed multiplier (OpenAI-specific)."
+    )
+    language: Optional[str] = Field(
+        default="en",
+        description="The language for the TTS request (OpenAI-specific, distinct from SpeakerConfig language).",
     )
 
     class Config:

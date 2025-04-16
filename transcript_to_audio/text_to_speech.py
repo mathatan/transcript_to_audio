@@ -34,11 +34,8 @@ DEFAULT_SPEAKER_2 = SpeakerConfig(voice="default_voice_2")
 
 
 class TextToSpeech:
-    tts_config: TTSConfig
     provider: TTSProvider
-    speaker_configs: Dict[int, SpeakerConfig] = (
-        None  # Will hold the final SpeakerConfig objects
-    )
+    tts_config: TTSConfig
 
     def __init__(
         self,
@@ -65,50 +62,6 @@ class TextToSpeech:
         else:
             self.tts_config = TTSConfig()  # Use default if None or invalid type
 
-        processed_speaker_configs = {}
-
-        # Check if user provided speaker configurations and process them
-        # Access speaker_configs via TTSConfig attribute
-        incoming_configs = self.tts_config.speaker_configs
-        if isinstance(
-            incoming_configs, dict
-        ):  # Still check if it's a dict, as it comes from TTSConfig
-            for speaker_id, config_value in incoming_configs.items():
-                try:
-                    sid = int(speaker_id)
-                    if isinstance(config_value, SpeakerConfig):
-                        # Use the instance directly if it's already a SpeakerConfig
-                        processed_speaker_configs[sid] = config_value
-                    elif isinstance(config_value, dict):
-                        # Parse the dictionary into a SpeakerConfig instance
-                        processed_speaker_configs[sid] = SpeakerConfig(**config_value)
-                    else:
-                        logger.warning(
-                            f"Invalid type for speaker config {sid}: {type(config_value)}. Skipping."
-                        )
-                        raise ValueError(
-                            f"Invalid type for speaker config {sid}: {type(config_value)}"
-                        )
-                except (ValueError, TypeError) as e:
-                    #  logger.warning(f"Error processing speaker config for ID '{speaker_id}': {e}. Skipping.")
-                    raise ValueError(
-                        f"Error processing speaker config for ID '{speaker_id}': {e}"
-                    )
-
-        # If no valid configs were processed or provided, use defaults
-        if not processed_speaker_configs:
-            self.speaker_configs = {1: DEFAULT_SPEAKER_1, 2: DEFAULT_SPEAKER_2}
-        else:
-            # Ensure default speakers 1 and 2 are present if not provided by user
-            if 1 not in processed_speaker_configs:
-                processed_speaker_configs[1] = DEFAULT_SPEAKER_1
-            if 2 not in processed_speaker_configs:
-                processed_speaker_configs[2] = DEFAULT_SPEAKER_2
-            self.speaker_configs = processed_speaker_configs
-
-        # Update the speaker_configs within the TTSConfig instance
-        self.tts_config.speaker_configs = self.speaker_configs
-
         # Initialize provider using factory, passing the TTSConfig instance
         self.provider = TTSProviderFactory.create(
             provider_name=provider, config=self.tts_config
@@ -120,7 +73,14 @@ class TextToSpeech:
         self.audio_format = self.tts_config.audio_format
 
     def convert_to_speech(
-        self, text: str, output_file: Optional[str], save_to_file: bool = False
+        self,
+        text: str,
+        speaker_configs: Dict[int, SpeakerConfig] = {
+            1: DEFAULT_SPEAKER_1,
+            2: DEFAULT_SPEAKER_2,
+        },
+        output_file: Optional[str] = None,
+        save_to_file: bool = False,
     ) -> Tuple[str, AudioSegment]:
         """
         Convert input text to speech and save as an audio file.
@@ -132,12 +92,17 @@ class TextToSpeech:
         Raises:
             ValueError: If the input text is not properly formatted
         """
-        cleaned_text = text
+
+        for key, config in speaker_configs.items():
+            if not isinstance(config, SpeakerConfig):
+                speaker_configs[key] = SpeakerConfig(**config)
 
         try:
             with tempfile.TemporaryDirectory(dir=self.temp_audio_dir) as temp_dir:
                 # Generate audio segments
-                audio_segments = self._generate_audio_segments(cleaned_text, temp_dir)
+                audio_segments = self._generate_audio_segments(
+                    text, speaker_configs, temp_dir
+                )
 
                 # Merge audio files into a single output
                 segments, audio = self._merge_audio_files(
@@ -164,11 +129,13 @@ class TextToSpeech:
             raise
 
     def _generate_audio_segments(
-        self, text: str, temp_dir: str
+        self, text: str, speaker_configs: Dict[int, SpeakerConfig], temp_dir: str
     ) -> Tuple[List[SpeakerSegment], Union[str | None]]:
         """Generate audio segments for each Q&A pair."""
         # Parse the input text into SpeakerSegment instances
-        segments = self.provider.split_qa(text, self.provider.get_supported_tags())
+        segments = self.provider.split_qa(
+            text, speaker_configs, self.provider.get_supported_tags()
+        )
 
         # audio_files = []
         audio_file = None
@@ -243,12 +210,13 @@ class TextToSpeech:
             A list of audio chunks split based on silence
         """
         if (
-            self.tts_config.use_emote
+            speaker_segment.voice_config.use_emote
             and speaker_segment.parameters.get("emote") is not None
         ):
             silence_threshold = -40  # Silence threshold in dB
             min_silence_len = (
-                int(round(float(self.tts_config.emote_pause) * 1000)) or 2000
+                int(round(float(speaker_segment.voice_config.emote_pause) * 1000))
+                or 2000
             )
 
             try:
@@ -256,7 +224,7 @@ class TextToSpeech:
                     audio,
                     min_silence_len=min_silence_len,
                     silence_thresh=silence_threshold,
-                    keep_silence=self.tts_config.emote_merge_pause or 500,
+                    keep_silence=speaker_segment.voice_config.emote_merge_pause or 500,
                 )
 
                 logger.info(

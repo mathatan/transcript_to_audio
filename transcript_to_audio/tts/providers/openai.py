@@ -34,16 +34,16 @@ class OpenAITTS(TTSProvider):
             )
         # Use values from config or defaults if None
         self.model = config.model or "tts-1-hd"
-        self.response_format = config.response_format
+        self.audio_format = config.audio_format
         self.streaming = config.streaming
         self.speed = config.speed
         self.language = config.language
 
         # Validate response format
         valid_formats = ["mp3", "opus", "aac", "flac", "wav", "pcm"]
-        if self.response_format not in valid_formats:
+        if self.audio_format not in valid_formats:
             raise ValueError(
-                f"Invalid response format: {self.response_format}. Must be one of {valid_formats}."
+                f"Invalid response format: {self.audio_format}. Must be one of {valid_formats}."
             )
 
         # Validate speed
@@ -69,7 +69,7 @@ class OpenAITTS(TTSProvider):
                     model=self.model,
                     voice=segment.voice_config.voice,
                     input=segment.text,
-                    response_format=self.response_format,
+                    audio_format=self.audio_format,
                     speed=self.speed,
                     language=self.language,
                     stream=self.streaming,

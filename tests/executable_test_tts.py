@@ -68,10 +68,7 @@ class ExecutableTestTTS:
                         "ELEVENLABS_API_KEY"
                     )
                     # provider_specific_config_args["model"] = "eleven_flash_v2_5"
-                    provider_specific_config_args["use_emote"] = True
-                    # provider_specific_config_args["emote_merge_pause"] = (
-                    #     600  # works better for FI
-                    # )
+
                 elif provider == "azureopenai":
                     provider_specific_config_args["api_key"] = os.getenv(
                         "AZURE_OPENAI_API_KEY"
@@ -105,6 +102,11 @@ class ExecutableTestTTS:
                 speaker2_config = None
 
                 if provider == "elevenlabs":
+                    emote_config = {
+                        "use_emote": True,
+                        "emote_merge_pause": 600,
+                        # works better for FI
+                    }
                     # Example voice IDs, replace with actual IDs if needed
                     # English
                     speaker1_config = SpeakerConfig(
@@ -112,12 +114,14 @@ class ExecutableTestTTS:
                         language="en-US",
                         stability=0.25,
                         similarity_boost=0.5,
+                        **emote_config,
                     )
                     speaker2_config = SpeakerConfig(
                         voice="Juniper",
                         language="en-US",
                         stability=0.25,
                         similarity_boost=0.5,
+                        **emote_config,
                     )
 
                     # Finnish
@@ -168,20 +172,27 @@ class ExecutableTestTTS:
 
                 # Create TTS Configuration with provider-specific speakers and env vars
                 test_tts_config = TTSConfig(
-                    speaker_configs={1: speaker1_config, 2: speaker2_config},
                     **provider_specific_config_args,
                 )
 
                 logger.debug(f"{provider=} {test_tts_config=}")
 
                 # Initialize TextToSpeech with the current provider and config
-                tts = TextToSpeech(provider=provider, tts_config=test_tts_config)
+                tts = TextToSpeech(
+                    provider=provider,
+                    tts_config=test_tts_config,
+                )
 
                 # Output file path within the defined output directory
                 output_file = os.path.join(output_dir, f"{provider}_output.mp3")
 
                 # Convert text to speech
-                tts.convert_to_speech(self.transcript_text, output_file, True)
+                tts.convert_to_speech(
+                    self.transcript_text,
+                    {1: speaker1_config, 2: speaker2_config},
+                    output_file,
+                    True,
+                )
 
                 # Verify the file was created
                 if os.path.exists(output_file):

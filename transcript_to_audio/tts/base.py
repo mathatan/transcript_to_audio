@@ -67,7 +67,10 @@ class TTSProvider(ABC):
             raise ValueError("Model must be specified")
 
     def split_qa(
-        self, input_text: str, supported_tags: List[str] = None
+        self,
+        input_text: str,
+        speaker_configs: Dict[int, SpeakerConfig],
+        supported_tags: List[str] = None,
     ) -> List[SpeakerSegment]:
         """
         Parse input text into a list of SpeakerSegment instances.
@@ -79,9 +82,6 @@ class TTSProvider(ABC):
         Returns:
             List[SpeakerSegment]: A list of SpeakerSegment instances.
         """
-        # Retrieve predefined configurations from the TTSConfig object
-        predefined_configs: Dict[int, SpeakerConfig] = self.config.speaker_configs
-
         # Clean the input text
         input_text = self.clean_tss_markup(input_text, supported_tags=supported_tags)
 
@@ -97,7 +97,7 @@ class TTSProvider(ABC):
             param_dict = dict(re.findall(r'(\w+)="(.*?)"', params))
 
             # Retrieve default configuration for the speaker ID
-            default_config = predefined_configs.get(speaker_id, {}).copy()
+            default_config = speaker_configs.get(speaker_id, {}).copy()
 
             # Identify fields in param_dict that match the SpeakerConfig schema
             schema_fields = SpeakerConfig.model_fields.keys()

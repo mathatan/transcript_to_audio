@@ -102,6 +102,7 @@ class ExecutableTestTTS:
                 speaker2_config = None
 
                 if provider == "elevenlabs":
+                    provider_specific_config_args["language"] = "en"
                     emote_config = {
                         "use_emote": True,
                         "emote_merge_pause": 600,
@@ -111,14 +112,14 @@ class ExecutableTestTTS:
                     # English
                     speaker1_config = SpeakerConfig(
                         voice="Liam",
-                        language="en-US",
+                        language="en",
                         stability=0.25,
                         similarity_boost=0.5,
                         **emote_config,
                     )
                     speaker2_config = SpeakerConfig(
                         voice="Juniper",
-                        language="en-US",
+                        language="en",
                         stability=0.25,
                         similarity_boost=0.5,
                         **emote_config,
@@ -127,13 +128,13 @@ class ExecutableTestTTS:
                     # Finnish
                     # speaker1_config = SpeakerConfig(
                     #     voice="Chris",
-                    #     language="fi-FI",
+                    #     language="fi",
                     #     stability=0.5,
                     #     similarity_boost=0.5,
                     # )
                     # speaker2_config = SpeakerConfig(
                     #     voice="tDgDlJWDwRpTqPofl3HU",
-                    #     language="fi-FI",
+                    #     language="fi",
                     #     stability=0.2,
                     #     similarity_boost=0.5,
                     # )

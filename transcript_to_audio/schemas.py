@@ -7,6 +7,51 @@ from pydantic import BaseModel, Field
 from pydub import AudioSegment
 
 
+SAID_TRANSLATIONS = {
+    "en-US": ('" ', " said.", ' "'),
+    "en-UK": ('" ', " said.", ' "'),
+    "en-AU": ('" ', " said.", ' "'),
+    "en-CA": ('" ', " said.", ' "'),
+    "en": ('" ', " said.", ' "'),  # Generic English
+    "ja": ("「", " と言いました。", " 「"),  # Japanese relies on explicit spacing
+    "zh": ("“", " 说了。”", " ”"),  # Chinese adds explicit spacing
+    "de": ("„", " sagte.", " „"),  # German explicit spacing
+    "hi": ("“", " कहा।”", " ”"),  # Hindi includes explicit spacing
+    "fr-FR": ("« ", " dit.", " «"),  # French uses explicit spaces with «
+    "fr-CA": ("« ", " dit.", " «"),
+    "fr": ("« ", " dit.", " «"),  # Generic French
+    "ko": ("“", " 라고 말했다.", " ”"),  # Korean with explicit spacing
+    "pt-BR": ("“", " disse.", " “"),  # Portuguese includes spaces
+    "pt-PT": ("“", " disse.", " “"),
+    "pt": ("“", " disse.", " “"),  # Generic Portuguese
+    "it": ("“", " disse.", " “"),  # Italian includes explicit spaces
+    "es-ES": ("“", " dijo.", " “"),
+    "es-MX": ("“", " dijo.", " “"),
+    "es": ("“", " dijo.", " “"),  # Generic Spanish
+    "id": ("“", " ujar.", " ”"),  # Indonesian includes explicit spaces
+    "nl": ("„", " zei.", " „"),  # Dutch spacing for continuation
+    "tr": ("“", " dedi.", " ”"),  # Turkish includes spaced quotes
+    "fil": ("“", " sinabi.", " ”"),  # Filipino spaced convention
+    "pl": ("„", " powiedział.", " „"),
+    "sv": ("“", " sade.", " ”"),  # Swedish spaced quotes
+    "bg": ("„", " каза.", " „"),
+    "ro": ("„", " a spus.", " „"),
+    "ar-SA": ("“", " قال.", " ”"),
+    "ar-AE": ("“", " قال.", " ”"),
+    "ar": ("“", " قال.", " ”"),  # Generic Arabic
+    "cs": ("„", " řekl.", " „"),
+    "el": ("« ", " είπε.", " «"),
+    "fi": ("“", " sanoi.", " ”"),
+    "hr": ("„", " rekao.", " „"),
+    "ms": ("“", " kata.", " ”"),
+    "sk": ("„", " povedal.", " „"),
+    "da": ("“", " sagde.", " ”"),
+    "ta": ("“", " என்றார்.", " ”"),
+    "uk": ("„", " сказав.", " „"),
+    "ru": ("„", " сказал.", " „"),
+}
+
+
 class SpeakerConfig(BaseModel):
     """
     Configuration for the speaker's properties.
@@ -31,7 +76,7 @@ class SpeakerConfig(BaseModel):
         description="Specifies the speaker's voice identifier.",
     )
     language: str = Field(
-        default="en-US", description="Language code for the speech, e.g., 'en-US'."
+        default="en", description="Language code for the speech, e.g., 'en'."
     )
     pitch: str = Field(default="default", description="Pitch of the speaker's voice.")
     speaking_rate: Union[str, float] = Field(

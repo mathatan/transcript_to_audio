@@ -10,7 +10,7 @@ from elevenlabs import (
 from elevenlabs.client import is_voice_id
 from ..base import TTSProvider
 from typing import List
-from ...schemas import SpeakerSegment, TTSConfig
+from ...schemas import SAID_TRANSLATIONS, SpeakerSegment, TTSConfig
 
 logger = logging.getLogger("transcript_to_audio_logger")
 
@@ -45,6 +45,9 @@ class ElevenLabsTTS(TTSProvider):
             logger.info(
                 f"Generating audio for Speaker {segment.speaker_id}: {segment.text}"
             )
+            said_str = SAID_TRANSLATIONS.get(
+                segment.voice_config.language.lower(), SAID_TRANSLATIONS["en"]
+            )
 
             # Determine previous_text and next_text
             # previous_text: str | None = (
@@ -64,10 +67,13 @@ class ElevenLabsTTS(TTSProvider):
                     if segments[i - 1].speaker_id == segment.speaker_id
                     else segments[i - 1].text
                     + (
-                        '" said. '
-                        if segments[i - 1].voice_config.use_emote
-                        and segments[i - 1].parameters.get("emote") is None
-                        else ('" ' + segments[i - 1].parameters.get("emote", "said"))
+                        said_str[0] + said_str[1]
+                        if not segments[i - 1].voice_config.use_emote
+                        or segments[i - 1].parameters.get("emote") is None
+                        else (
+                            said_str[0]
+                            + segments[i - 1].parameters.get("emote", said_str[1])
+                        )
                     )
                 )
                 if i > 0
@@ -78,13 +84,14 @@ class ElevenLabsTTS(TTSProvider):
                     segments[i + 1].text
                     if segments[i + 1].speaker_id == segment.speaker_id
                     else (
-                        '" said. ' + segments[i + 1].text
-                        if segment.voice_config.use_emote
-                        and segment.parameters.get("emote") is None
+                        said_str[0] + said_str[1] + said_str[2] + segments[i + 1].text
+                        if not segment.voice_config.use_emote
+                        or segment.parameters.get("emote") is None
                         else (
                             segments[i + 1].text
-                            + '" '
-                            + segment.parameters.get("emote", "said")
+                            + said_str[2]
+                            + said_str[0]
+                            + segment.parameters.get("emote", said_str[1])
                         )
                     )
                 )
@@ -127,8 +134,11 @@ class ElevenLabsTTS(TTSProvider):
                 and segment.voice_config.emote_pause is not None
                 and segment.parameters.get("emote", None) is not None
             ):
-                text += (
-                    f'<break time="{segment.voice_config.emote_pause}s" />" '
+                text = (
+                    said_str[2]
+                    + text
+                    + f'<break time="{segment.voice_config.emote_pause}s" />'
+                    + said_str[0]
                     + segment.parameters.get("emote")
                 )
 

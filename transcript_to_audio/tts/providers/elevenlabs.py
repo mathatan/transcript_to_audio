@@ -107,7 +107,11 @@ class ElevenLabsTTS(TTSProvider):
                 use_speaker_boost=segment.voice_config.use_speaker_boost,
             )
 
-            voice = segment.voice_config.voice
+            voice = (
+                str(segment.voice_config.voice).strip()
+                if isinstance(segment.voice_config.voice, str)
+                else segment.voice_config.voice
+            )
 
             if isinstance(voice, str) and is_voice_id(voice):
                 voice_id = voice
@@ -118,7 +122,7 @@ class ElevenLabsTTS(TTSProvider):
                     None,
                 )
                 if maybe_voice_id is None:
-                    raise ValueError(body=f"Voice model {voice} not found.")
+                    raise ValueError(f"Voice model {voice} not found.")
                 voice_id = maybe_voice_id
 
             prev_requests = previous_request_ids[-3:]

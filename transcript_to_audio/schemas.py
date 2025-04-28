@@ -2,7 +2,7 @@
 Pydantic models and data structures for TTS configuration and processing.
 """
 
-from typing import Optional, Dict, Union
+from typing import Any, Optional, Dict, Union
 from pydantic import BaseModel, Field
 from pydub import AudioSegment
 
@@ -187,6 +187,22 @@ class TTSConfig(BaseModel):
 
     class Config:
         extra = "allow"  # Allow extra fields for specific providers or future use.
+
+    def prune(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the config, excluding fields
+        that should not be persisted (e.g., API keys, temporary paths).
+        Uses Pydantic v2's model_dump method.
+        """
+        fields_to_exclude = {
+            "api_key",
+            "api_base",
+            "api_version",
+            "deployment",
+            "output_directories",
+            "temp_audio_dir",
+        }
+        return self.model_dump(exclude=fields_to_exclude)
 
 
 class SpeakerSegment:
